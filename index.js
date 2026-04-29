@@ -1,4 +1,4 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/9.0.1/firebase-app.js"; import { getDatabase, ref, set, onValue, get, off, child, update, limitToLast, query, remove, onDisconnect} from "https://www.gstatic.com/firebasejs/9.0.1/firebase-database.js"; import { getAuth, GoogleAuthProvider, signInWithPopup, getAdditionalUserInfo  } from "https://www.gstatic.com/firebasejs/9.0.1/firebase-auth.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.0.1/firebase-app.js"; import { getDatabase, ref, set, onValue, get, off, child, update, limitToLast, query, remove, onDisconnect } from "https://www.gstatic.com/firebasejs/9.0.1/firebase-database.js"; import { getAuth, GoogleAuthProvider, signInWithPopup, getAdditionalUserInfo, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/9.0.1/firebase-auth.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyAMfW_Qc7q1rlM-KJYKbUbc_zUqtZ24qNw",
@@ -8,17 +8,49 @@ const firebaseConfig = {
     messagingSenderId: "421417324094",
     appId: "1:421417324094:web:5d0634747c1b5661d14b6f",
     measurementId: "G-P1HEZ14TS1"
-  };
+};
 let start
 const app = initializeApp(firebaseConfig)
 const db = getDatabase(app)
 const auth = getAuth(app);
+
+
 let totalRooms = 0
 let notificationAllowed
 
-let settings = JSON.parse(localStorage.getItem("settings"))
 
-function setup(){
+
+
+let settings = {}
+
+onAuthStateChanged(auth, async (user) => {
+    if (user) {
+        // User is signed in, apply user info to settings
+        settings = {
+            uid: user.uid,
+            email: user.email,
+            displayName: user.displayName,
+            profilePic: user.photoURL,
+        };
+        // Fetch nickname from server
+        const nicknameSnap = await get(ref(db, `users/${user.uid}/nickname`));
+        settings.nickname = nicknameSnap.val();
+        localStorage.setItem("settings", JSON.stringify(settings));
+        // Proceed with setting up the user profile and UI
+        setUpUserProfile();
+        checkIfGlobalAdmin();
+        retrieveRooms();
+        addFriend();
+
+    } else {
+        // User is signed out, show login setup
+        setup();
+    }
+});
+
+let uidImageMap = new Map()
+
+function setup() {
     const previousHTML = document.body.innerHTML
     document.getElementById("chatArea").style.visibility = "hidden"
     document.getElementById("my-rooms").style.display = "none"
@@ -26,24 +58,25 @@ function setup(){
     document.getElementById("my-profile-tab").style.display = "none"
     document.getElementById("my-friend-requests-tab").style.display = "none"
     document.getElementById("my-friends-container").style.display = "none"
+    document.getElementById("returntopage").style.display = "none"
     document.getElementById("login").innerHTML = `
         <div id="sign-in">
-            <button id = "signin">Sign in with google</button>
+            <img src="icon.png" alt="FyreChat Logo" id="logo">
+            <h1 id="app-name">FyreChat</h1>
+            <button id="signin">Sign in with Google</button>
         </div>
     `
     const signin = document.getElementById("signin")
-    async function login(){
+    async function login() {
         const provider = new GoogleAuthProvider();
         provider.setCustomParameters({
             prompt: 'select_account' // Forces the account chooser dialog to show
-        });      
+        });
         const result = await signInWithPopup(auth, provider);
         const user = result.user;
         ////console.log(user)
         const userSettings = {
-            profilePic: user.photoURL,
-            displayName: user.displayName,
-            uid:user.uid,
+            uid: user.uid,
             email: user.email,
         }
         settings = {}
@@ -56,26 +89,18 @@ function setup(){
         document.getElementById("my-rooms").style.display = "block"
         document.getElementById("chatArea").style.visibility = "hidden"
         document.getElementById("my-profile-tab").style.display = "flex"
+        document.getElementById("returntopage").style.display = "block"
         window.location.reload()
     }
     signin.addEventListener("click", login)
 }
-try {
-    Object.keys(settings)
-    if (settings.email == null){
-        localStorage.clear()
-        alert("This application is out of date. We will reload the page and you will have to sign in again.")
-        window.location.reload()
-    }
-    set(ref(db, `users/${settings.uid}/displayName/`), settings.displayName)
-    set(ref(db, `users/${settings.uid}/profilePic`), settings.profilePic)
-    set(ref(db, `users/${settings.uid}/email`), settings.email)
-} catch {
-    setup()
-}
+
 let index = 0
-async function setUpUserProfile (){
+async function setUpUserProfile() {
     // set my profile
+    const profilePicget = await get(ref(db, `users/${settings.uid}/profilePic`))
+    settings.profilePic = profilePicget.val()
+    uidImageMap[settings.uid] = profilePicget.val()
     const profilePic = settings.profilePic
     var img = new Image();
     img.crossOrigin = 'Anonymous';
@@ -85,28 +110,28 @@ async function setUpUserProfile (){
     img.onload = async function () {
         console.log("eee")
         var canvas = document.createElement('canvas'),
-        ctx = canvas.getContext('2d');
-                
+            ctx = canvas.getContext('2d');
+
         canvas.height = img.naturalHeight;
         canvas.width = img.naturalWidth;
         ctx.drawImage(img, 0, 0);
-                
+
         // Unfortunately, we cannot keep the original image type, so all images will be converted to PNG
         // For this reason, we cannot get the original Base64 string
         var uri = canvas.toDataURL('image/jpg'),
-        b64 = uri.replace(/^data:image\/jpg;base64,/, "");
+            b64 = uri.replace(/^data:image\/jpg;base64,/, "");
         document.getElementById("my-profile-pic").style.backgroundImage = `url(${b64})`
         document.getElementById("my-profile-tab").style.backgroundImage = `url(${b64})`
 
         var blockSize = 5, // only visit every 5 pixels
-        defaultRGB = {r:0,g:0,b:0}, // for non-supporting envs
-        canvas = document.createElement('canvas'),
-        context = canvas.getContext && canvas.getContext('2d'),
-        data, width, height,
-        i = -4,
-        length,
-        rgb = {r:0,g:0,b:0},
-        count = 0;
+            defaultRGB = { r: 0, g: 0, b: 0 }, // for non-supporting envs
+            canvas = document.createElement('canvas'),
+            context = canvas.getContext && canvas.getContext('2d'),
+            data, width, height,
+            i = -4,
+            length,
+            rgb = { r: 0, g: 0, b: 0 },
+            count = 0;
         if (!context) {
             return defaultRGB;
         }
@@ -117,143 +142,109 @@ async function setUpUserProfile (){
         context.drawImage(img, 0, 0);
 
         try {
-                data = context.getImageData(0, 0, width, height);
-        } catch(e) {
+            data = context.getImageData(0, 0, width, height);
+        } catch (e) {
             /* security error, img on diff domain */
             return defaultRGB;
         }
 
         length = data.data.length;
 
-        while ( (i += blockSize * 4) < length ) {
+        while ((i += blockSize * 4) < length) {
             ++count;
             rgb.r += data.data[i];
-            rgb.g += data.data[i+1];
-            rgb.b += data.data[i+2];
+            rgb.g += data.data[i + 1];
+            rgb.b += data.data[i + 2];
         }
 
         // ~~ used to floor values
-        rgb.r = ~~(rgb.r/count);
-        rgb.g = ~~(rgb.g/count);
-        rgb.b = ~~(rgb.b/count);
+        rgb.r = ~~(rgb.r / count);
+        rgb.g = ~~(rgb.g / count);
+        rgb.b = ~~(rgb.b / count);
         console.log(rgb)
         let dominantColor = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`
-        /* const imageData = ctx.getImageData(0, 0, img.width, img.height).data;
-        const colorCounts = {};
-        for (let i = 0; i < imageData.length; i += 4) {
-            const r = imageData[i];
-            const g = imageData[i + 1];
-            const b = imageData[i + 2];
-            const color = `rgb(${r},${g},${b})`;
-            colorCounts[color] = (colorCounts[color] || 0) + 1;
-        }
-        let dominantColor;
-        let maxCount = 100;
-        console.log(colorCounts)
-        for (const color in colorCounts) {
-        if (colorCounts[color] > maxCount) {
-            maxCount = colorCounts[color];
-            console.log(maxCount)
-            dominantColor = color;
-        }*/
         document.getElementById("my-profile-background").style.backgroundColor = dominantColor
     }
     // set my profile name
     const displayName = await get(ref(db, `users/${settings.uid}/displayName`))
     console.log(displayName.val())
     document.getElementById("my-profile-displayname").textContent = displayName.val()
-    const nickname = await get(ref(db, `users/${settings.uid}/nickname`))
-    if (nickname.val() == null){
-        
-    } else {
-        document.getElementById("my-profile-nickname").value = nickname.val()
+    if (settings.nickname != null) {
+        document.getElementById("my-profile-nickname").value = settings.nickname
     }
-    document.getElementById("link").textContent = `https://krupaltisgaonkar.github.io/chat/?addFriend=${btoa(settings.uid)}`
-    
+    document.getElementById("link").textContent = `${window.location.href}?addFriend=${btoa(settings.uid)}`
+    // get number of friend requests
+    const friendrequests = await get(ref(db, `users/${settings.uid}/receivedFriendRequests`))
+    try {
+        Object.keys(friendrequests.val())
+        document.getElementById("friend-request-notification-number").textContent = Object.keys(friendrequests.val()).length
+        document.getElementById("friend-request-notification-number").style.display = "flex"
+    } catch {
+        document.getElementById("friend-request-notification-number").style.display = "none"
+    }
 }
 setUpUserProfile()
 
 // search for admins
-onValue(ref(db, `admins/`), (snapshot) => {
-    const val = snapshot.val()
-    console.log(val)
-    if (val !== null){ 
-        const allEmails = Object.values(val)
-        allEmails.forEach(email => {
-            if (email == settings.email){
-                console.log("is admin")
-                localStorage.setItem("admin", true)
-                document.getElementById("admin-help").style.display = "block"
-            }
-        })
-    } else {
-        return false
-    }
-}, {onlyOnce: true})
-
-window.addEventListener("keydown", (e) => {
-    if (e.ctrlKey && e.shiftKey && e.key === 'E'){
-        e.preventDefault()
-        if (localStorage.getItem("admin") == "true" || localStorage.getItem("admin") == true){
-            const user = window.prompt("which one?")
-            if (user == "normal"){
-                settings.displayName = localStorage.getItem("settings").displayName
-                settings.profilePic = localStorage.getItem("settings").profilePic
-            } else if (user == "admin"){
-                settings.profilePic = "https://www.pngkey.com/png/full/263-2635979_admin-abuse.png"
-                settings.displayName = "Admin"
-                alert("You are now an admin!")
-            }
-        }
-    }
-    if (e.ctrlKey && e.shiftKey && e.key === 'H'){
-        e.preventDefault()
-        if (localStorage.getItem("admin") == "true" || localStorage.getItem("admin") == true) alert("Admin help section:\nctrl + shift + e: switch to admin role.\nType 'admin' for admin name and profile pic. Type 'normal' for ur normal profile pic and name.\n\n\nctrl + shift + a: add a new admin\n\nctrl + shift + v: view all the rooms.")
-    }
-    if (e.ctrlKey && e.shiftKey && e.key == "A"){
-        e.preventDefault()
-        if (localStorage.getItem("admin") == true || localStorage.getItem("admin") == "true"){
-            const addadmin = prompt("Type the email of the admin you want to add.")
-            const pattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            if (pattern.test(addadmin)){
-                onValue(ref(db, `admins`), (snapshot) => {
-                    const val = snapshot.val()
-                    if (val == null){
-                        set(ref(db, `admins/0`), addadmin)
-                        alert(`${addadmin} is now an admin.`)
-                    } else {
-                        const valKeys = Object.keys(val)
-                        set(ref(db, `admins/${valKeys.length}`), addadmin)
-                        alert(`${addadmin} is now an admin.`)
-                    }
-                }, {onlyOnce: true})
-            } else {
-                alert("plz provide a complete and valid email.")
-            }
-        }
-    }
-    if (e.ctrlKey && e.shiftKey && e.key == "V"){
-        e.preventDefault()
-        if (localStorage.getItem("admin") == true || localStorage.getItem("admin") == "true"){
-            onValue(ref(db, "rooms"), (snapshot) => {
-                const all = Object.values(snapshot.val())
-                let pages = Math.floor(all.length/21)
-                let rem = all.length % 20
-                console.log("pages", pages, " ", "rem", rem)
-                if (rem > 0) pages++
-                let items = ""
-                all.forEach(item => {
-                    items += item + "\n"
-                })
-                for (var i = 1; i <= pages; i++){
-                    let vow
-                    if (rem > 0) vow = pages; else vow = 20
-                    alert(`Page ${i} of showing ${vow} rooms` + items)
+let isUserAdmin = false
+let isGlobalAdmin = false
+function checkIfGlobalAdmin() {
+    onValue(ref(db, `admins/`), (snapshot) => {
+        const val = snapshot.val()
+        console.log(val)
+        if (val !== null) {
+            const allEmails = Object.values(val)
+            let found = false
+            allEmails.forEach(email => {
+                if (email == settings.email) {
+                    found = true
                 }
-                
-            }, {onlyOnce: true})
+            })
+            if (found) {
+                console.log("is admin")
+                isGlobalAdmin = true
+                isUserAdmin = true
+                document.getElementById("admin-help").style.display = "block"
+            } else {
+                isGlobalAdmin = false
+                document.getElementById("admin-help").style.display = "none"
+            }
+        } else {
+            return false
         }
-        
+    }, { onlyOnce: true })
+}
+
+set(ref(db, `admins/0`), "krupalt78@gmail.com")
+
+window.addEventListener("keydown", async (e) => {
+    if (isGlobalAdmin) {
+        if (e.ctrlKey && e.shiftKey && e.key === 'H') {
+            e.preventDefault()
+            if (isGlobalAdmin) alert("Admin help section:\n\n\n\nctrl + shift + a: add a new admin")
+        }
+        if (e.ctrlKey && e.shiftKey && e.key == "A") {
+            e.preventDefault()
+            if (isGlobalAdmin) {
+                const addadmin = prompt("Type the email of the admin you want to add.")
+                const pattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                if (pattern.test(addadmin)) {
+                    onValue(ref(db, `admins`), (snapshot) => {
+                        const val = snapshot.val()
+                        if (val == null) {
+                            set(ref(db, `admins/0`), addadmin)
+                            alert(`${addadmin} is now an admin.`)
+                        } else {
+                            set(ref(db, `admins/${Object.keys(val).length}`), addadmin)
+                            alert(`${addadmin} is now an admin.`)
+                        }
+                    }, { onlyOnce: true })
+                } else {
+                    alert("plz provide a complete and valid email.")
+                }
+            }
+
+        }
     }
 })
 
@@ -262,10 +253,10 @@ let onlineNum
 let partofmain = ""
 let isOnMain = ""
 
-function roomNameGenerator(){
-    const words = ["Funk", "Sigma", "Rizzler", "Apex", "Silly", "Gorilla", "Yass", "Slay", "Queen", "Rizzy", "Word", "Elephant", "Slow", "Sloth", "Monkey", "Black", "White", "Yellow", "Red", "T-rex", "Bob", "Boom", "Gooner", "Ohio", "Gyatt", "Run", "Walk", "Jog", "Trot", "Peculiar", "Gag", "Gagging", "Sleeping", "Snoring", "Easy", "Pickings", "Trigger", "Negotiater", "Liar", "River", "Cow", "LIGMA", "b@115", "WASTER", "Garbage", "Port", "Ship", "Slimy", "Sticky", "Liquidy", "slowy", "MOMMMMMMMMY"]
+function roomNameGenerator() {
+    const words = ["Funk", "Sigma", "Rizzler", "Apex", "Silly", "Gorilla", "Yass", "Slay", "Queen", "Rizzy", "Word", "Elephant", "Slow", "Sloth", "Monkey", "Black", "White", "Yellow", "Red", "T-rex", "Bob", "Boom", "Gooner", "Ohio", "Gyatt", "Run", "Walk", "Jog", "Trot", "Peculiar", "Gag", "Gagging", "Sleeping", "Snoring", "Easy", "Pickings", "Trigger", "Negotiater", "Liar", "River", "Cow", "LIGMA", "b@115", "WASTER", "Garbage", "Port", "Ship", "Slimy", "Sticky", "Liquidy", "slowy", "MOMMMMMMMMY", "goo", "ee", "random word generator", "cringe", "based", "sus", "skribbl.io", "doodle or die", "gartic phone", "discord", "slack", "microsoft teams", "zoom", "google meet", "schoology", "canvas", "blackboard", "moodle", "github", "gitlab", "bitbucket", "sourceforge", "codeberg", "codepen", "jsfiddle", "replit", "glitch", "heroku", "netlify", "vercel", "digitalocean", "linode", "vultr", "aws", "azure", "gcp", "oracle cloud", "ibm cloud", "alibaba cloud", "cloudflare", "fastly", "akamai", "cloudfront"]
     let word = ""
-    for (let i = 0; i < 3; i++){
+    for (let i = 0; i < 3; i++) {
         const randomIndex = Math.floor(Math.random() * words.length);
         word += words[randomIndex]
     }
@@ -277,7 +268,7 @@ function roomNameGenerator(){
 document.getElementById("search-people").addEventListener("input", () => {
     const allLi = document.querySelectorAll("#people-online ul li")
     allLi.forEach(li => {
-        if (!li.textContent.toLocaleLowerCase().includes(document.getElementById("search-people").value)){
+        if (!li.textContent.toLocaleLowerCase().includes(document.getElementById("search-people").value)) {
             li.classList.add("hide")
         } else {
             li.classList.remove("hide")
@@ -286,14 +277,13 @@ document.getElementById("search-people").addEventListener("input", () => {
 })
 
 let previousBannedRef = null
-async function checkBannedPeople(id){
-    console.log("1")
+async function checkBannedPeople(id) {
     const bannedRef = `chat/${id}/ban`
-    if (previousBannedRef !== null){
+    if (previousBannedRef !== null) {
         off(previousBannedRef)
     }
     previousBannedRef = ref(db, `chat/${id}/ban`)
-    onValue(previousBannedRef, async function(snapshot){
+    onValue(previousBannedRef, async function (snapshot) {
         const banned = snapshot
         if (banned.val() == null) {
             document.getElementById("banned").innerHTML = ""
@@ -304,37 +294,37 @@ async function checkBannedPeople(id){
             document.getElementById("banned").innerHTML = ""
             const valkeys = Object.keys(banned.val())
             console.log(valkeys.length)
-            for(var i = 0; i < valkeys.length; i++){
+            const bannedMap = valkeys.map(async (valKey) => {
                 // this prints: console.log(i)
-                const valKey = valkeys[i]
                 const userDisplayName = await get(ref(db, `users/${valKey}/displayName`))
-                // anything in here doesn't print or run
+                const userNickname = await get(ref(db, `users/${valKey}/nickname`))
+                console.log(userDisplayName.val(), userNickname.val())
                 const li = document.createElement("li")
-                li.textContent = userDisplayName.val()
+                li.textContent = userDisplayName.val() == null ? userNickname.val() : userDisplayName.val()
                 li.style.cursor = "pointer"
                 li.classList.add("banned")
                 li.id = `banned-${valKey}`
                 li.dataset.userId = valKey
                 const userInfo = document.getElementById("user-info")
-                li.addEventListener("click", async function(e){
+                li.addEventListener("click", async function (e) {
                     console.log(userInfo.style.width)
-                    userInfo.style.top = e.clientY -100 +"px"
+                    userInfo.style.top = e.clientY - 100 + "px"
                     const userNickname = await get(ref(db, `users/${valKey}/nickname`))
-                    if (userNickname.val() !== null){
+                    if (userNickname.val() !== null) {
                         document.getElementById("vowwwwidk").textContent = `${userNickname.val()} (${li.textContent})`
                     } else {
                         document.getElementById('vowwwwidk').textContent = li.textContent
                     }
-    
-                    if (localStorage.getItem("admin") == true || localStorage.getItem("admin") == "true"){
+
+                    if (isUserAdmin) {
                         document.getElementById("unban").style.display = "block"
                     }
-                    
+
                     const unban = document.getElementById("unban")
-                    unban.addEventListener("click", function(){
+                    unban.addEventListener("click", function () {
                         const uid = li.id.split("-")[1]
                         const unbanConfirm = confirm("Unban this person from this chat")
-                        if (unbanConfirm){
+                        if (unbanConfirm) {
                             remove(ref(db, bannedRef + "/" + uid))
                         }
                     })
@@ -357,99 +347,81 @@ async function checkBannedPeople(id){
                         console.log("eee")
                         var canvas = document.createElement('canvas'),
                             ctx = canvas.getContext('2d');
-                    
+
                         canvas.height = img.naturalHeight;
                         canvas.width = img.naturalWidth;
                         ctx.drawImage(img, 0, 0);
-                    
+
                         // Unfortunately, we cannot keep the original image type, so all images will be converted to PNG
                         // For this reason, we cannot get the original Base64 string
                         var uri = canvas.toDataURL('image/jpg'),
-                        b64 = uri.replace(/^data:image\/jpg;base64,/, "");
-                    
+                            b64 = uri.replace(/^data:image\/jpg;base64,/, "");
+
                         document.getElementById("profile-pic").style.backgroundImage = `url("${b64}")`
                         var blockSize = 5, // only visit every 5 pixels
-                        defaultRGB = {r:0,g:0,b:0}, // for non-supporting envs
-                        canvas = document.createElement('canvas'),
-                        context = canvas.getContext && canvas.getContext('2d'),
-                        data, width, height,
-                        i = -4,
-                        length,
-                        rgb = {r:0,g:0,b:0},
-                        count = 0;
-    
+                            defaultRGB = { r: 0, g: 0, b: 0 }, // for non-supporting envs
+                            canvas = document.createElement('canvas'),
+                            context = canvas.getContext && canvas.getContext('2d'),
+                            data, width, height,
+                            i = -4,
+                            length,
+                            rgb = { r: 0, g: 0, b: 0 },
+                            count = 0;
+
                         if (!context) {
                             return defaultRGB;
                         }
-    
+
                         height = canvas.height = img.naturalHeight || img.offsetHeight || img.height;
                         width = canvas.width = img.naturalWidth || img.offsetWidth || img.width;
-    
+
                         context.drawImage(img, 0, 0);
-    
+
                         try {
                             data = context.getImageData(0, 0, width, height);
-                        } catch(e) {
+                        } catch (e) {
                             /* security error, img on diff domain */
                             return defaultRGB;
                         }
-    
+
                         length = data.data.length;
-    
-                        while ( (i += blockSize * 4) < length ) {
+
+                        while ((i += blockSize * 4) < length) {
                             ++count;
                             rgb.r += data.data[i];
-                            rgb.g += data.data[i+1];
-                            rgb.b += data.data[i+2];
+                            rgb.g += data.data[i + 1];
+                            rgb.b += data.data[i + 2];
                         }
-    
+
                         // ~~ used to floor values
-                        rgb.r = ~~(rgb.r/count);
-                        rgb.g = ~~(rgb.g/count);
-                        rgb.b = ~~(rgb.b/count);
+                        rgb.r = ~~(rgb.r / count);
+                        rgb.g = ~~(rgb.g / count);
+                        rgb.b = ~~(rgb.b / count);
                         console.log(rgb)
                         let dominantColor = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`
-                       /* const imageData = ctx.getImageData(0, 0, img.width, img.height).data;
-                        const colorCounts = {};
-                        for (let i = 0; i < imageData.length; i += 4) {
-                            const r = imageData[i];
-                            const g = imageData[i + 1];
-                            const b = imageData[i + 2];
-                            const color = `rgb(${r},${g},${b})`;
-                            colorCounts[color] = (colorCounts[color] || 0) + 1;
-                        }
-                        let dominantColor;
-                        let maxCount = 100;
-                        console.log(colorCounts)
-                        for (const color in colorCounts) {
-                            console.log("Color:", color, "  ColorCounts[color]", colorCounts[color])
-                            if (colorCounts[color] > maxCount) {
-                                maxCount = colorCounts[color];
-                                console.log(maxCount)
-                                dominantColor = color;
-                            }
-                        } */
                         document.getElementById("profile-background").style.backgroundColor = dominantColor
                     }
                 })
                 console.log(li)
-                document.getElementById("banned").appendChild(li)
-            }
-                
+                return li
+            })
+
+            const liElements = await Promise.all(bannedMap)
+            document.getElementById("banned").append(...liElements)
         }
     })
 }
 
 let previousMemberRef = null
 
-async function checkMembers(id){
+async function checkMembers(id) {
     console.log("1")
     const memberRef = `chat/${id}/members`
-    if (previousMemberRef !== null){
+    if (previousMemberRef !== null) {
         off(previousMemberRef)
     }
     previousMemberRef = ref(db, `chat/${id}/members`)
-    onValue(previousMemberRef, async function(snapshot){
+    onValue(previousMemberRef, async function (snapshot) {
         const members = snapshot
         if (members.val() == null) {
             document.getElementById("members").innerHTML = ""
@@ -460,24 +432,24 @@ async function checkMembers(id){
             document.getElementById("members").innerHTML = ""
             const valkeys = Object.keys(members.val())
             console.log(valkeys.length)
-            for(var i = 0; i < valkeys.length; i++){
+            const memberPromises = valkeys.map(async (valKey) => {
                 // this prints: console.log(i)
-                const valKey = valkeys[i]
                 const userDisplayName = await get(ref(db, `users/${valKey}/displayName`))
+                const userNickname = await get(ref(db, `users/${valKey}/nickname`))
                 // anything in here doesn't print or run
                 const li = document.createElement("li")
-                li.textContent = userDisplayName.val()
+                li.textContent = userNickname.val() == null ? userDisplayName.val() : userNickname.val()
                 li.style.cursor = "pointer"
                 li.classList.add("member")
                 li.id = `member-${valKey}`
                 li.dataset.userId = valKey
                 const userInfo = document.getElementById("user-info")
-                li.addEventListener("click", async function(e){
+                li.addEventListener("click", async function (e) {
                     console.log(userInfo.style.width)
-                    userInfo.style.top = e.clientY -100 +"px"
+                    userInfo.style.top = e.clientY - 100 + "px"
                     const userNickname = await get(ref(db, `users/${valKey}/nickname`))
-                    if (userNickname.val() !== null){
-                        document.getElementById("vowwwwidk").textContent = `${userNickname.val()} (${li.textContent})`
+                    if (userNickname.val() !== null) {
+                        document.getElementById("vowwwwidk").textContent = `${userNickname.val()} (${userDisplayName.val()})`
                     } else {
                         document.getElementById('vowwwwidk').textContent = li.textContent
                     }
@@ -489,87 +461,137 @@ async function checkMembers(id){
                     clone.addEventListener("click", () => {
                         sendFriendRequest(li.id.split("-")[1], false)
                     })
-                    const userProfilePic = await get(ref(db, `users/${valKey}/profilePic`))
+
+                    let userProfilePic = ""
+                    if (uidImageMap.get(valKey) !== undefined) {
+                        userProfilePic = uidImageMap.get(valKey)
+                    } else {
+                        const rawDataUrl = await fetchImageAsBase64((await get(ref(db, `users/${valKey}/profilePic`))).val());
+                        userProfilePic = rawDataUrl
+                        uidImageMap.set(valKey, rawDataUrl)
+                    }
                     document.getElementById("unban").style.display = "none"
-                    if (settings.uid == li.id.split("-")[1]){
+                    if (settings.uid == li.id.split("-")[1]) {
                         document.getElementById("profile-add-friend").style.display = "none"
                     } else {
                         document.getElementById("profile-add-friend").style.display = "block"
                     }
                     var img = new Image();
                     img.crossOrigin = 'Anonymous';
-                    img.src = userProfilePic.val();
+                    img.src = userProfilePic;
                     img.referrerPolicy = "no-referrer"
+                    // i think i got this off of stack overflow
                     // The magic begins after the image is successfully loaded
                     img.onload = function () {
                         console.log("eee")
                         var canvas = document.createElement('canvas'),
                             ctx = canvas.getContext('2d');
-                    
+
                         canvas.height = img.naturalHeight;
                         canvas.width = img.naturalWidth;
                         ctx.drawImage(img, 0, 0);
-                    
+
                         // Unfortunately, we cannot keep the original image type, so all images will be converted to PNG
                         // For this reason, we cannot get the original Base64 string
                         var uri = canvas.toDataURL('image/jpg'),
-                        b64 = uri.replace(/^data:image\/jpg;base64,/, "");
-                    
+                            b64 = uri.replace(/^data:image\/jpg;base64,/, "");
+
                         document.getElementById("profile-pic").style.backgroundImage = `url("${b64}")`
                         var blockSize = 5, // only visit every 5 pixels
-                        defaultRGB = {r:0,g:0,b:0}, // for non-supporting envs
-                        canvas = document.createElement('canvas'),
-                        context = canvas.getContext && canvas.getContext('2d'),
-                        data, width, height,
-                        i = -4,
-                        length,
-                        rgb = {r:0,g:0,b:0},
-                        count = 0;
-    
+                            defaultRGB = { r: 0, g: 0, b: 0 }, // for non-supporting envs
+                            canvas = document.createElement('canvas'),
+                            context = canvas.getContext && canvas.getContext('2d'),
+                            data, width, height,
+                            i = -4,
+                            length,
+                            rgb = { r: 0, g: 0, b: 0 },
+                            count = 0;
+
                         if (!context) {
                             return defaultRGB;
                         }
-    
+
                         height = canvas.height = img.naturalHeight || img.offsetHeight || img.height;
                         width = canvas.width = img.naturalWidth || img.offsetWidth || img.width;
-    
+
                         context.drawImage(img, 0, 0);
-    
+
                         try {
                             data = context.getImageData(0, 0, width, height);
-                        } catch(e) {
+                        } catch (e) {
                             /* security error, img on diff domain */
                             return defaultRGB;
                         }
-    
+
                         length = data.data.length;
-    
-                        while ( (i += blockSize * 4) < length ) {
+
+                        while ((i += blockSize * 4) < length) {
                             ++count;
                             rgb.r += data.data[i];
-                            rgb.g += data.data[i+1];
-                            rgb.b += data.data[i+2];
+                            rgb.g += data.data[i + 1];
+                            rgb.b += data.data[i + 2];
                         }
-    
+
                         // ~~ used to floor values
-                        rgb.r = ~~(rgb.r/count);
-                        rgb.g = ~~(rgb.g/count);
-                        rgb.b = ~~(rgb.b/count);
+                        rgb.r = ~~(rgb.r / count);
+                        rgb.g = ~~(rgb.g / count);
+                        rgb.b = ~~(rgb.b / count);
                         console.log(rgb)
                         let dominantColor = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`
                         document.getElementById("profile-background").style.backgroundColor = dominantColor
                     }
                 })
-                console.log(li)
-                document.getElementById("members").appendChild(li)
-            }
-                
+                let userProfilePic = uidImageMap.get(valKey)
+                if (!userProfilePic) {
+                    const profilePicUrl = (await get(ref(db, `users/${valKey}/profilePic`))).val()
+                    userProfilePic = profilePicUrl || ""
+                    uidImageMap.set(valKey, userProfilePic)
+                }
+                const ep = document.createElement("img")
+                ep.src = userProfilePic || ""
+                ep.width = 30
+                ep.height = 30
+                ep.style.display = "inline-block"
+                ep.style.borderRadius = "50%"
+                ep.style.objectFit = "cover"
+                ep.classList.add("member-profile-pic")
+                li.prepend(ep)
+                return li
+            })
+
+            const liElements = await Promise.all(memberPromises)
+            document.getElementById("members").append(...liElements)
         }
     })
 }
 
+async function fetchImageAsBase64(url) {
+    try {
+        // Fetch image with no-referrer
+        const response = await fetch(url, {
+            method: 'GET',
+            mode: 'cors', // or 'no-cors' if allowed
+            referrerPolicy: "no-referrer", // Removes referer header
+        });
+
+        // Convert response to Blob
+        const blob = await response.blob();
+
+        // Convert Blob to Base64 using FileReader
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob); // Returns data:image/png;base64,...
+        });
+    } catch (error) {
+        console.error('Error fetching image:', error);
+    }
+}
+
+
 let previousRef = null
-async function whichOne(id, main, part){
+async function whichOne(id, main, part) {
     let limit = 50
     document.getElementById("nic").style.display = "block"
     document.getElementById("roomNameDiv").style.display = "flex"
@@ -577,40 +599,52 @@ async function whichOne(id, main, part){
     await checkBannedPeople(id)
     await checkMembers(id)
     set(ref(db, `chat/${id}/members/${settings.uid}`), true)
-    if (previousRef !== null){
+    // check if they are the creator of this room and if they are then give them admin privelages
+    if (main == false) {
+        let isAdmin = await get(ref(db, `chat/${id}/creator`))
+        console.log(isAdmin.val())
+        if (isAdmin.val() == null) {
+            set(ref(db, `chat/${id}/creator/`), settings.uid)
+            isAdmin = await get(ref(db, `chat/${id}/creator`))
+            isUserAdmin = true
+        } else if (isAdmin.val() !== null) {
+            if (isAdmin.val() == settings.uid) {
+                isUserAdmin = true
+                console.log("heheh")
+            } else {
+                isUserAdmin = false
+            }
+        }
+    }
+
+
+    document.getElementById("roomNameDiv").style.display = "flex"
+
+    if (previousRef !== null) {
         off(previousRef)
     }
-    if (main){
-        previousRef = query(ref(db, `chat/main/content/${part}`), limitToLast(limit))
-        document.getElementById("nic").style.display = "none"
-    } else {
-        previousRef = query(ref(db, `chat/${id}/content`), limitToLast(limit))
-        document.getElementById("nic").style.display = "block"
-    }
+
+    previousRef = query(ref(db, `chat/${id}/content`), limitToLast(limit))
+    document.getElementById("nic").style.display = "block"
     let location
-    if (main){
-        location = query(ref(db, `chat/main/content/${part}`), limitToLast(limit))
-        previousOnline = `chat/main/online`
-    }
-    else {
-        location = query(ref(db, `chat/${id}/content`), limitToLast(limit))
-        previousOnline = `chat/${id}/online`
-    }
+
+    location = query(ref(db, `chat/${id}/content`), limitToLast(limit))
+    previousOnline = `chat/${id}/online`
 
     document.getElementById("people-online").style.display = "flex"
     // making chat private
     const privateBtn = document.getElementById("status-of-chat")
     const status = await get(ref(db, `chat/${id}/private`))
-    if (status == null || status == false){
+    if (status.val() == null || status.val() == false) {
         privateBtn.checked = true
-    } else if(status) {
+    } else if (status.val() == true) {
         privateBtn.checked = false
     }
-    privateBtn.addEventListener("change", async function(){
-        if (privateBtn.checked == true){
+    privateBtn.addEventListener("change", async function () {
+        if (privateBtn.checked == true) {
             await set(ref(db, `chat/${id}/private`), true)
-            alert("this chat is now not available to join")
-        } else if(privateBtn.checked == false){
+            alert("this private chat is now not available to join")
+        } else if (privateBtn.checked == false) {
             await set(ref(db, `chat/${id}/private`), false)
             alert("this chat is now available to join")
         }
@@ -619,35 +653,33 @@ async function whichOne(id, main, part){
     // showing banned people
 
     // put messages
-    onValue(location, async function(snapshot){
+    onValue(location, async function (snapshot) {
         const val = snapshot.val()
-        
-        if (val == null){
-            if (main){
-                set(ref(db, "chat/main/content/" + part), "")
-            } else {
-                // seeing if the room doesn't exist or doesn't have any content, then create the room
-                set(ref(db, "chat/" + id + "/content"), "")
-                if (id.length !== 50){
-                    onValue(ref(db, "rooms/"), (snapshot) => {
-                        const val = snapshot.val()
-                        const all = Object.values(val)
-                        let found = false
-                        for (var i = 0; i < all.length; i++){
-                            if (all[i] == id){
-                                found = true
-                            }   
+
+        if (val == null) {
+
+            // seeing if the room doesn't exist or doesn't have any content, then create the room
+            set(ref(db, "chat/" + id + "/content"), "")
+            if (id.length !== 50) {
+                onValue(ref(db, "rooms/"), (snapshot) => {
+                    const val = snapshot.val()
+                    const all = Object.values(val)
+                    let found = false
+                    for (var i = 0; i < all.length; i++) {
+                        if (all[i] == id) {
+                            found = true
                         }
-                        if (!found){
-                            set(ref(db, `rooms/${all.length}`), id)
-                        }
-                    }, {onlyOnce: true})
-                }
+                    }
+                    if (!found) {
+                        set(ref(db, `rooms/${all.length}`), id)
+                    }
+                }, { onlyOnce: true })
+
             }
         }
         const chatBox = document.getElementById("chatBox")
         chatBox.innerHTML = ""
-        if (val == null){
+        if (val == null) {
             index = 0
             document.getElementById("login").style.display = "none"
             document.getElementById("rooms").style.display = "none"
@@ -657,18 +689,24 @@ async function whichOne(id, main, part){
             index = parseFloat(Object.keys(val).slice(-1)[0]) + 1
             const messages = Object.entries(val)
             const messageKey = Object.keys(val)
-            const allProfilePics = []
             let hehe = []
             console.log(messages)
             //console.log(messages)
-            for (let i = 0; i < messages.length; i++){
+            for (let i = 0; i < messages.length; i++) {
                 const valArray = messages[i][1]
                 let listener
                 //console.log(index)
                 const outer = document.createElement("div")
                 outer.classList.add("message")
                 const innerPic = document.createElement("img")
-                innerPic.src = valArray[valArray.length - 1]
+                if (uidImageMap.get(valArray[5]) !== undefined) {
+                    innerPic.src = uidImageMap.get(valArray[5])
+                } else {
+                    const rawDataUrl = await fetchImageAsBase64(valArray[valArray.length - 1]);
+                    innerPic.src = rawDataUrl
+                    uidImageMap.set(valArray[5], rawDataUrl)
+                }
+
                 innerPic.classList.add("profile-pic")
                 innerPic.width = "30px"
                 innerPic.alt = "pic"
@@ -682,15 +720,15 @@ async function whichOne(id, main, part){
                 date.textContent = valArray[1]
                 date.classList.add("date")
                 const message = document.createElement("div")
-                if (valArray[4] == true){
+                if (valArray[4] == true) {
                     message.innerHTML = valArray[0]
-                } else if (valArray[4] == false){
+                } else if (valArray[4] == false) {
                     message.textContent = valArray[0]
                 }
                 chatBox.appendChild(outer)
                 outer.appendChild(innerPic)
                 outer.appendChild(displayName)
-                if (localStorage.getItem("admin")){
+                if (isUserAdmin == true) {
                     const adminOptions = document.createElement("div")
                     adminOptions.classList.add("admin-options")
                     adminOptions.id = messageKey[i]
@@ -719,20 +757,20 @@ async function whichOne(id, main, part){
                 outer.appendChild(message)
             }
             let add = 0
-            for (let b = 0; b < hehe.length; b++){
+            for (let b = 0; b < hehe.length; b++) {
                 add += hehe[b]
             }
-            console.log(add/hehe.length)
+            console.log(add / hehe.length)
             const lastMessage = Object.entries(val)[Object.keys(val).length - 1][1]
-            if (localStorage.getItem("admin")){
+            if (isUserAdmin == true) {
                 const edits = document.querySelectorAll(".admin-options .edit")
                 edits.forEach(edit => {
                     edit.addEventListener("click", () => {
                         const promptAns = window.prompt("What would you like to change it to?")
-                        if (promptAns.trim() == ""){
+                        if (promptAns.trim() == "") {
                             return false
                         } else {
-                            set(ref(db, main ? `chat/main/content/${part}/${edit.parentElement.id}/0` : `chat/${id}/content/${edit.parentElement.id}/0`), promptAns)
+                            set(ref(db, `chat/${id}/content/${edit.parentElement.id}/0`), promptAns)
                         }
 
                     })
@@ -742,7 +780,7 @@ async function whichOne(id, main, part){
                 remove.forEach(remove => {
                     remove.addEventListener("click", () => {
                         const confirm = window.confirm("Do you want to delete this message?")
-                        if (confirm){
+                        if (confirm) {
                             set(ref(db, main ? `chat/main/content/${part}/${remove.parentElement.id}/0` : `chat/${id}/content/${remove.parentElement.id}/0`), `<em>This message was deleted by an admin.</em>`)
                             set(ref(db, main ? `chat/main/content/${part}/${remove.parentElement.id}/4` : `chat/${id}/content/${remove.parentElement.id}/4`), true)
                         } else {
@@ -768,41 +806,41 @@ async function whichOne(id, main, part){
                                 let banningSelf = false
                                 onValue(ref(db, main ? `chat/main/content/${part}/${ban.parentElement.id}/5` : `chat/${id}/content/${ban.parentElement.id}/5`), (snapshot) => {
                                     const userBan = snapshot.val()
-                                    if (userBan == settings.uid){
+                                    if (userBan == settings.uid) {
                                         alert("you can't ban ur self")
                                         banningSelf = true
                                     }
-                                }, {onlyOnce: true})
-                                
-                                if (banningSelf){
+                                }, { onlyOnce: true })
+
+                                if (banningSelf) {
                                     return false
                                 } else {
-                                    for (let k = 0; k < banList.length; k++){
-                                        if (banId == banList[k]){
+                                    for (let k = 0; k < banList.length; k++) {
+                                        if (banId == banList[k]) {
                                             found = true
                                         }
                                     }
-                                    if (!found){
+                                    if (!found) {
                                         const confirmBan = confirm(`Ban this account?`)
-                                        if (confirmBan){
+                                        if (confirmBan) {
                                             set(ref(db, main ? `chat/main/ban/${banId}` : `chat/${id}/ban/${banId}`), true)
                                         }
                                     } else {
                                         const confirmBan = confirm("Let this person back into this chat?")
-                                        if (confirmBan){
+                                        if (confirmBan) {
                                             set(ref(db, main ? `chat/main/ban/${banId}` : `chat/${id}/ban/${banId}`), null)
                                         }
                                     }
                                 }
-                            }, {onlyOnce: true})
-                        }, {onlyOnce: true})
-                            
+                            }, { onlyOnce: true })
+                        }, { onlyOnce: true })
+
                     })
                 })
             }
             //console.log(lastMessage)
-            if (lastMessage[5] !== settings.uid){
-                sendNotification(lastMessage[0], main ? `main/${part}`: `${id}`, lastMessage[3], "")
+            if (lastMessage[5] !== settings.uid) {
+                sendNotification(lastMessage[0], main ? `main/${part}` : `${id}`, lastMessage[3], "")
             }
             chatBox.scrollTo({
                 top: chatBox.scrollHeight,
@@ -812,7 +850,7 @@ async function whichOne(id, main, part){
             document.getElementById("login").style.display = "none"
             document.getElementById("rooms").style.display = "none"
             document.getElementById("chatArea").style.visibility = "visible"
-            
+
         }
     })
 }
@@ -846,70 +884,70 @@ joinButton.addEventListener("click", async () => {
         const keys = val
         let found = false
         //console.log(document.getElementById("roomid").value)
-        for (var i =0; i < Object.keys(keys).length; i++){
+        for (var i = 0; i < Object.keys(keys).length; i++) {
             //console.log(i)
             randomCode = document.getElementById("roomid").value
             //console.log(randomCode)
-            if (randomCode == keys[i]){
+            if (randomCode == keys[i]) {
                 found = true
             }
         }
         //console.log("ee")
-        if (found){
+        if (found) {
             const privateStatus = await get(ref(db, `chat/${randomCode}/private`))
-            if (privateStatus.val() == true){
+            if (privateStatus.val() == true) {
                 alert("this chat is not open to other users")
                 window.location.reload()
                 return false
             }
             document.getElementById("rooms").style.display = "none"
-            if (randomCode == "main"){
+            if (randomCode == "main") {
                 window.location.reload()
             }
             onValue(ref(db, `chat/${randomCode}/ban`), (snapshot) => {
                 const banList = snapshot.val() == null ? "" : Object.keys(snapshot.val())
-                if (banList.includes(settings.uid)){
+                if (banList.includes(settings.uid)) {
                     alert("you are banned from this chat")
                     window.location.reload()
                 }
-            }, {onlyOnce: true})
-            if (randomCode !== "main"){
+            }, { onlyOnce: true })
+            if (randomCode !== "main") {
                 onValue(ref(db, `users/${settings.uid}/rooms`), (snapshot) => {
                     const val = snapshot.val()
-                    if (val !== null){
+                    if (val !== null) {
                         let foundCode = false
-                        for (var k = 0; k < Object.keys(val).length; k++){
-                            if (val[k] == randomCode){
+                        for (var k = 0; k < Object.keys(val).length; k++) {
+                            if (val[k] == randomCode) {
                                 foundCode = true
                             }
                         }
-                        if (!foundCode){
+                        if (!foundCode) {
                             set(ref(db, `users/${settings.uid}/rooms/${Object.keys(val).length}`), randomCode)
                         }
                     }
                     else {
                         set(ref(db, `users/${settings.uid}/rooms/0`), randomCode)
                     }
-                }, {onlyOnce: true})
+                }, { onlyOnce: true })
             }
             document.getElementById("online").textContent = randomCode
             onValue(ref(db, `chat/${randomCode}/nickname`), (snapshot) => {
                 const value = snapshot.val()
-                if (value == null){
+                if (value == null) {
                     set(ref(db, `chat/${randomCode}/nickname`), roomNameGenerator())
                 } else {
                     document.getElementById("roomName").value = value
                 }
-            }, {onlyOnce: true})
+            }, { onlyOnce: true })
             whichOne(document.getElementById("roomid").value, false, "")
-            
+
         } else {
             alert(`Room id "${randomCode}" not found`)
         }
-    }, {onlyOnce:true})
+    }, { onlyOnce: true })
 })
 
-function back(){
+function back() {
     document.getElementById("createroom").style.display = "block"
     joinRoom.style.display = "block"
     joinArea.style.display = "none"
@@ -926,13 +964,13 @@ document.getElementById("roomName").addEventListener("focusout", () => {
 function getRandomInteger(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
 }
-  
+
 function generateRandomCode(length) {
     const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
     let code = '';
     for (let i = 0; i < length; i++) {
-      const randomIndex = getRandomInteger(0, characters.length - 1);
-      code += characters.charAt(randomIndex);
+        const randomIndex = getRandomInteger(0, characters.length - 1);
+        code += characters.charAt(randomIndex);
     }
     return code;
 }
@@ -945,9 +983,9 @@ createRoom.addEventListener("click", () => {
     let stuff
     onValue(ref(db, `users/${settings.uid}/rooms`), (snapshot) => {
         const val = snapshot.val()
-        stuff =  Object.keys(val).length
+        stuff = Object.keys(val).length
         //console.log(stuff)
-    }, {onlyOnce: true})
+    }, { onlyOnce: true })
     let totalnomRooms
     onValue(ref(db, `rooms/`), (snapshot) => {
         const val = snapshot.val()
@@ -955,21 +993,20 @@ createRoom.addEventListener("click", () => {
         totalnomRooms = Object.keys(val)
         set(ref(db, `rooms/${totalnomRooms.length}`), randomCode)
         //console.log(totalnomRooms.length)
-    }, {onlyOnce: true})
+    }, { onlyOnce: true })
     set(ref(db, `users/${settings.uid}/rooms/${stuff}`), randomCode)
     set(ref(db, `chat/${randomCode}/creator`), settings.uid)
     document.getElementById("rooms").style.display = "none"
     document.getElementById("chatArea").style.display = "flex"
     onValue(ref(db, `chat/${randomCode}/nickname`), (snapshot) => {
         const value = snapshot.val()
-        if (value == null){
+        if (value == null) {
             roomNameGenerator(`chat/${randomCode}`)
         } else {
             document.getElementById("roomName").value = value
         }
     })
     whichOne(randomCode, false, "")
-    ////console.log("click")
 })
 
 //set message and enter varialbes
@@ -980,15 +1017,20 @@ const send = document.getElementById("enter")
 // files 
 const fileInput = document.getElementById("upload")
 fileInput.addEventListener('change', (event) => {
-  const file = event.target.files[0];
-  const reader = new FileReader();
+    const file = event.target.files[0];
+    const fileSizeInBytes = file.size;
+    if (fileSizeInBytes > 100 * 1024) { // 100kb limit
+        alert("File size exceeds 100KB limit.");
+        return;
+    }
+    const reader = new FileReader();
 
-  reader.onloadend = () => {
-    const base64String = reader.result
-    writeData(randomCode, `<img src = "${base64String}" class = "chatPicture">`, true, isOnMain, partofmain)
-  };
+    reader.onloadend = () => {
+        const base64String = reader.result
+        writeData(randomCode, `<img src = "${base64String}" class = "chatPicture">`, true, isOnMain, partofmain)
+    };
 
-  reader.readAsDataURL(file);
+    reader.readAsDataURL(file);
 });
 // write data
 message.addEventListener("keydown", (e) => {
@@ -1002,116 +1044,43 @@ send.addEventListener("click", () => {
 })
 
 
-function writeData(id, text, sendingAttachment, main, part){
-    if (text.trim() == ""){
+function writeData(id, text, sendingAttachment, main, part) {
+    if (text.trim() == "") {
         return false
     } else {
         let location
-        if (main){
+        if (main) {
             location = ref(db, `chat/main/content/${part}/${index++}`)
         } else {
             location = ref(db, `chat/${id}/content/${index++}`)
         }
         message.value = ""
         //console.log(index)
-        const send = [text, `${new Date().toLocaleDateString('en-US', {month:"long", day:"numeric", year:"numeric"})} at ${new Date().toLocaleTimeString()}`, "", settings.nickname == null ? settings.displayName : settings.nickname,  sendingAttachment, settings.uid, settings.profilePic]
+        const send = [text, `${new Date().toLocaleDateString('en-US', { month: "long", day: "numeric", year: "numeric" })} at ${new Date().toLocaleTimeString()}`, "", settings.nickname == null ? settings.displayName : settings.nickname, sendingAttachment, settings.uid, settings.profilePic]
         set(location, send)
     }
 }
 
-// shortcut to main room
 
-const joinMainRoomButton = document.getElementById("joinMain")
-joinMainRoomButton.addEventListener("click", () => {
-    randomCode = "main"
-    document.getElementById("navbar").style.display = "flex"
-    partofmain = "general"
-    onValue(ref(db, `chat/${randomCode}/ban`), (snapshot) => {
-        const banList = snapshot.val() == null ? "" : Object.keys(snapshot.val())
-        if (banList.includes(settings.uid)){
-            alert("you are banned from this chat")
-            window.location.reload()
-        }
-    }, {onlyOnce: true})
-    whichOne(randomCode, true, "general")
-    document.getElementById("rooms").style.display = "none"
-    document.getElementById("roomNameDiv").style.display = "none"
-})
+function retrieveRooms() {
+    onValue(ref(db, `users/${settings.uid}/rooms`), async (snapshot) => {
+        const val = snapshot.val()
+        console.log(val)
+        if (val == null) {
 
-// different channels of the main channel
-
-const rules = document.getElementById("rules")
-const general = document.getElementById("general")
-const memes = document.getElementById("memes")
-const school = document.getElementById("school")
-
-rules.addEventListener("click", () => {
-    randomCode = "main"
-    if (localStorage.getItem("admin") == "true"){
-        document.getElementById("message-container").style.display = "flex"
-        document.getElementById("upload").style.display = "block"
-    } else {
-        document.getElementById("message-container").style.display = "none"
-        document.getElementById("upload").style.display = "none"
-    }
-    partofmain = "rules"
-    whichOne("main", true, "rules")
-})
-
-general.addEventListener("click", () => {
-    randomCode = "main"
-    document.getElementById("message-container").style.display = "flex"
-    document.getElementById("upload").style.display = "block"
-    partofmain = "general"
-    whichOne("main", true, "general")
-})
-
-memes.addEventListener("click", () => {
-    randomCode = "main"
-    document.getElementById("message-container").style.display = "flex"
-    document.getElementById("upload").style.display = "block"
-    partofmain = "memes"
-    whichOne("main", true, "memes")
-})
-
-school.addEventListener("click", () => {
-    randomCode = "main"
-    document.getElementById("message-container").style.display = "flex"
-    document.getElementById("upload").style.display = "block"
-    partofmain = "school"
-    whichOne("main", true, "school")
-})
-
-window.setInterval(function(){
-    if (randomCode == "main"){
-        isOnMain = true
-        document.getElementById("navbar").style.display = "flex"
-        document.getElementById("online").textContent = `main/${partofmain}`
-    } else {
-        isOnMain = false
-        document.getElementById("navbar").style.display = "none"
-        document.getElementById("online").textContent = randomCode
-    }
-})
-
-// saved rooms
-
-onValue(ref(db, `users/${settings.uid}/rooms`), (snapshot) => {
-    const val = snapshot.val()
-    if (val == null){
-        
-    } else {
-        const valKeys = Object.keys(val)
-        totalRooms = valKeys.length
-        document.getElementById("niceone").innerHTML = ""
-        let allli = document.querySelectorAll(".easypickings")
-        for (var i = 0; i < valKeys.length; i++){
-            const newli = document.createElement("li")
-            const easy = val[i]
-            onValue(ref(db, `chat/${val[i]}/nickname`), (snapshot) => {
-                const value = snapshot.val()
-                if (value == null){
-                    const vow =  roomNameGenerator()
+        } else {
+            const valKeys = Object.keys(val)
+            totalRooms = valKeys.length
+            console.log(valKeys)
+            document.getElementById("niceone").innerHTML = ""
+            let allli = document.querySelectorAll(".easypickings")
+            const liPromises = valKeys.map(async (valKey, i) => {
+                const newli = document.createElement("li")
+                const easy = val[valKey]
+                const nicknameSnap = await get(ref(db, `chat/${easy}/nickname`))
+                const value = nicknameSnap.val()
+                if (value == null) {
+                    const vow = roomNameGenerator()
                     set(ref(db, `chat/${easy}/nickname`), vow)
                     newli.textContent = vow + " " + "(" + easy + ")"
                 } else {
@@ -1126,28 +1095,29 @@ onValue(ref(db, `users/${settings.uid}/rooms`), (snapshot) => {
                     randomCode = newli.id
                     document.getElementById("roomNameDiv").style.display = "flex"
                     const litextcontent = newli.textContent
-                    document.getElementById("roomName").value = litextcontent.substring(0, litextcontent.length-7)
+                    document.getElementById("roomName").value = litextcontent.substring(0, litextcontent.length - 7)
                     document.getElementById("online").textContent = randomCode
                     onValue(ref(db, `chat/${randomCode}/ban`), (snapshot) => {
                         const banList = snapshot.val() == null ? "" : Object.keys(snapshot.val())
-                        if (banList.includes(settings.uid)){
+                        if (banList.includes(settings.uid)) {
                             alert("you are banned from this chat")
                             window.location.reload()
                         }
-                    }, {onlyOnce: true})
+                    }, { onlyOnce: true })
                     whichOne(randomCode, false, "")
                 })
-                document.getElementById("niceone").appendChild(newli)
-                console.log("f")
+                return newli
             })
+            const lis = await Promise.all(liPromises)
+            lis.forEach(li => document.getElementById("niceone").appendChild(li))
         }
-    }
-})
+    })
+}
 // profiles
 const userInfo = document.getElementById("user-info")
 document.addEventListener("click", () => {
-    document.onclick = function(e){
-        if(e.target.id !== 'user-info' && e.target.id.split("-")[0] !== "banned" && e.target.id !== "profile-background" && e.target.id !== "profile-status" && e.target.id !== "profile-pic" && e.target.id !== "profile-add-friend" && e.target.id !== "vowwwwidk" && e.target.id.split("-")[0] !== "member"){
+    document.onclick = function (e) {
+        if (e.target.id !== 'user-info' && e.target.id.split("-")[0] !== "banned" && e.target.id !== "profile-background" && e.target.id !== "profile-status" && e.target.id !== "profile-pic" && e.target.id !== "profile-add-friend" && e.target.id !== "vowwwwidk" && e.target.id.split("-")[0] !== "member") {
             setTimeout(() => {
                 userInfo.style.height = "0px"
                 userInfo.style.width = "0px"
@@ -1156,7 +1126,7 @@ document.addEventListener("click", () => {
                     userInfo.style.height = "200px"
                     userInfo.style.width = "200px"
                 }, 300)
-                
+
             }, 0)
         }
     }
@@ -1170,16 +1140,20 @@ myProfileTab.addEventListener("click", () => {
 
 // close profile
 
-document.getElementById("close-my-profile").addEventListener("click", ()=> {
+document.getElementById("close-my-profile").addEventListener("click", () => {
     document.getElementById("my-profile").style.display = "none"
 })
 
 // sign out
 
-document.getElementById("sign-out").addEventListener("click", () => {
+document.getElementById("sign-out").addEventListener("click", async () => {
     const ans = confirm("Do you want to sign out?")
-    if (ans){
+    if (ans) {
+        // Clear local storage
         localStorage.clear()
+        // Sign out from Firebase
+        await signOut(auth)
+        // Reload the page
         window.location.reload()
     }
 })
@@ -1190,14 +1164,13 @@ document.getElementById("my-profile-nickname").addEventListener("focusout", () =
     const nickname = document.getElementById("my-profile-nickname")
     settings.nickname = nickname.value.trim() == "" ? null : nickname.value
     set(ref(db, `users/${settings.uid}/nickname`), settings.nickname)
-    localStorage.setItem("settings", JSON.stringify(settings))
 })
 
 // copy friending link
 
 document.getElementById("friending-link-copy").addEventListener("click", async () => {
     try {
-        await navigator.clipboard.writeText(`https://krupaltisgaonkar.github.io/chat/?addFriend=${btoa(settings.uid)}`)
+        await navigator.clipboard.writeText(`${window.location.href}/?addFriend=${btoa(settings.uid)}`)
         alert("copied")
     }
     catch {
@@ -1208,20 +1181,20 @@ document.getElementById("friending-link-copy").addEventListener("click", async (
 // friending links
 const urlParams = new URLSearchParams(window.location.search)
 const friendingValue = urlParams.get("addFriend")
-async function sendFriendRequest(senderId, url){
+async function sendFriendRequest(senderId, url) {
     console.log("run")
     const ee = await get(ref(db, `users/${settings.uid}/friends`))
     if (ee.val() !== null) {
         const all = Object.keys(ee.val())
         let found = false
         all.forEach(item => {
-            if (senderId == item){
-                found =true
+            if (senderId == item) {
+                found = true
             }
         })
-        if (found){
+        if (found) {
             alert("user is already a friend")
-            if (url == true){
+            if (url == true) {
                 window.location.replace(window.location.href.split("?addFriend=")[0])
             }
             return false
@@ -1232,7 +1205,7 @@ async function sendFriendRequest(senderId, url){
             } catch {
                 alert("failed to send friend request")
             }
-            if (url == true){
+            if (url == true) {
                 window.location.replace(window.location.href.split("?addFriend=")[0])
             }
         }
@@ -1245,10 +1218,10 @@ async function sendFriendRequest(senderId, url){
         }
         window.location.replace(window.location.href.split("?addFriend=")[0])
     }
-    
+
 }
 
-if (friendingValue !== null && atob(friendingValue).length == 28 && atob(friendingValue) !== settings.uid){
+if (friendingValue !== null && atob(friendingValue).length == 28 && atob(friendingValue) !== settings.uid) {
     sendFriendRequest(atob(friendingValue), true)
 }
 
@@ -1256,10 +1229,11 @@ document.getElementById("my-friend-requests-tab").addEventListener("click", asyn
     onValue(ref(db, `users/${settings.uid}/receivedFriendRequests`), async function (snapshot) {
         const friendRequests = snapshot
         document.getElementById("my-friend-requests").innerHTML = ""
-        if (friendRequests.val() !== null){
+        if (friendRequests.val() !== null) {
+            document.getElementById("friend-request-notification-number").style.display = "flex"
             const allFriendRequests = Object.keys(friendRequests.val())
             console.log(allFriendRequests)
-            for (var i = 0; i <allFriendRequests.length; i++){
+            for (var i = 0; i < allFriendRequests.length; i++) {
                 console.log(allFriendRequests[i])
                 const displayName = await get(ref(db, `users/${allFriendRequests[i]}/displayName`))
                 const nickname = await get(ref(db, `users/${allFriendRequests[i]}/nickname`))
@@ -1307,6 +1281,8 @@ document.getElementById("my-friend-requests-tab").addEventListener("click", asyn
                 requestContainer.appendChild(accept)
                 requestContainer.appendChild(decline)
             }
+        } else {
+            document.getElementById("friend-request-notification-number").style.display = "none"
         }
     })
     document.getElementById("my-friend-requests-container").style.display = "block"
@@ -1317,36 +1293,76 @@ document.getElementById("friend-requests-close").addEventListener("click", () =>
 })
 
 // friending
-
-onValue(ref(db, `users/${settings.uid}/friends`), async (snapshot) => {
-    const val = snapshot.val()
-    document.getElementById("my-friends").innerHTML = ""
-    if (val !== null){
-        const allFriends = Object.keys(val)
-        console.log(allFriends)
-        // can't use forEach because doesn't support async operations
-        for (let i = 0; i < allFriends.length; i++){
-            const friend = allFriends[i]
-            const friendNick = await get(ref(db, `users/${friend}/nickname`))
-            const friendDisplay = await get(ref(db, `users/${friend}/displayName`))
-            const totalString = friendNick.val() == null ? friendDisplay.val() : `${friendNick.val()} (${friendDisplay.val()})`
-            const img = await get(ref(db, `users/${friend}/profilePic`))
-            const li = document.createElement("li")
-            li.id = `friend-${friend}`
-            li.innerHTML = `<img src = "${img.val()}" referrerPolicy = "no-referrer"  cross-origin = "Anonymous">${totalString}`
-            li.addEventListener("click", async () => {
-                const getRandomCode = await get(ref(db, `users/${settings.uid}/friends/${li.id.split("-")[1]}`))
-                randomCode = getRandomCode.val()
-                await whichOne(getRandomCode.val(), false, "")
-                document.getElementById("roomNameDiv").style.display = "none"
-                document.getElementById("people").style.display = "none"
-                document.getElementById("nic").style.display = "none"
+function addFriend() {
+    onValue(ref(db, `users/${settings.uid}/friends`), async (snapshot) => {
+        const val = snapshot.val()
+        document.getElementById("my-friends").innerHTML = ""
+        if (val !== null) {
+            const allFriends = Object.keys(val)
+            console.log(allFriends)
+            const liPromises = allFriends.map(async (friend) => {
+                const friendNick = await get(ref(db, `users/${friend}/nickname`))
+                const friendDisplay = await get(ref(db, `users/${friend}/displayName`))
+                const totalString = friendNick.val() == null ? friendDisplay.val() : `${friendNick.val()} (${friendDisplay.val()})`
+                let imgurl = ""
+                if (uidImageMap.get(friend) !== undefined) {
+                    imgurl = uidImageMap.get(friend)
+                } else {
+                    const rawDataUrl = await fetchImageAsBase64((await get(ref(db, `users/${friend}/profilePic`))).val());
+                    imgurl = rawDataUrl
+                    uidImageMap.set(friend, rawDataUrl)
+                }
+                const li = document.createElement("li")
+                li.id = `friend-${friend}`
+                li.innerHTML = `<img src = "${imgurl}" referrerPolicy = "no-referrer"  cross-origin = "Anonymous">${totalString}`
+                li.addEventListener("click", async () => {
+                    const getRandomCode = await get(ref(db, `users/${settings.uid}/friends/${li.id.split("-")[1]}`))
+                    randomCode = getRandomCode.val()
+                    await whichOne(getRandomCode.val(), false, "")
+                    document.getElementById("roomNameDiv").style.display = "none"
+                    document.getElementById("people").style.display = "none"
+                    document.getElementById("nic").style.display = "none"
+                })
+                return li
             })
-            document.getElementById("my-friends").appendChild(li)
+            const lis = await Promise.all(liPromises)
+            lis.forEach(li => document.getElementById("my-friends").appendChild(li))
+        } else {
+            return false
         }
-    } else {
-        return false
+    })
+}
+
+document.getElementById("return").addEventListener("click", () => {
+    // go to main page and not to chat, go to join room and creat room page
+    if (previousRef !== null) {
+        off(previousRef);
+        previousRef = null;
     }
+    if (previousBannedRef !== null) {
+        off(previousBannedRef);
+        previousBannedRef = null;
+    }
+    if (previousMemberRef !== null) {
+        off(previousMemberRef);
+        previousMemberRef = null;
+    }
+
+    document.getElementById("chatArea").style.visibility = "hidden";
+    document.getElementById("nic").style.display = "none";
+    document.getElementById("roomNameDiv").style.display = "none";
+    document.getElementById("people").style.display = "none";
+    document.getElementById("rooms").style.display = "flex";
+    document.getElementById("createroom").style.display = "block";
+    document.getElementById("join").style.display = "block";
+    document.getElementById("joinRoom").style.display = "none";
+    document.getElementById("people-online").style.display = "none";
+
+    randomCode = "";
+    isOnMain = "";
+    partofmain = "";
+    index = 0;
+    isUserAdmin = false;
 })
 
 
@@ -1355,22 +1371,22 @@ onValue(ref(db, `users/${settings.uid}/friends`), async (snapshot) => {
 let notifications
 function askNotificationPermission() {
     if (!("Notification" in window)) {
-      alert("This browser does not support notifications.")
-      return;
+        alert("This browser does not support notifications.")
+        return;
     }
     Notification.requestPermission().then((permission) => {
-      notifications = permission
-      if (!permission){
-        alert("Please enable notifications if you want to know if there are any new messages. We promise you will only receive notifications of the chat you are on")
-      }
+        notifications = permission
+        if (!permission) {
+            alert("Please enable notifications if you want to know if there are any new messages. We promise you will only receive notifications of the chat you are on")
+        }
     });
 }
 
 askNotificationPermission()
 
-function sendNotification(message, place, name, pic){
-    if (notifications){
-        if (document.visibilityState == "hidden"){
+function sendNotification(message, place, name, pic) {
+    if (notifications) {
+        if (document.visibilityState == "hidden") {
             const notification = new Notification(`New message from ${name} in room ${place}`, { body: message, icon: "icon.png", vibrate: [200, 100, 200], });
         }
     }

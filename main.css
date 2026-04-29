@@ -7,7 +7,8 @@
 
 
 #background {
-    background: linear-gradient(to bottom right, #7d0000, #00607a); /* Example: red to blue gradient from top to bottom */
+    background: linear-gradient(to bottom right, #7d0000, #00607a);
+    /* Example: red to blue gradient from top to bottom */
     height: 100vh;
     width: 100vw;
     position: fixed;
@@ -30,12 +31,12 @@ body {
     padding: 10px;
     font-size: larger;
     overflow-y: scroll;
-    overflow-wrap:break-word;
+    overflow-wrap: break-word;
 }
 
 #right {
     width: 50%;
-    display:flex;
+    display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
@@ -87,8 +88,9 @@ body {
     background-color: rgb(255, 136, 0);
     border: 4px solid transparent;
     border-radius: 8px;
-    background-clip: padding-box;  
+    background-clip: padding-box;
 }
+
 #chatBox::-webkit-scrollbar {
     width: 14px;
 }
@@ -116,6 +118,7 @@ body {
 
 #message {
     width: 100%;
+    resize:none;
     height: 27px;
     border: none;
     outline: none;
@@ -130,15 +133,15 @@ body {
 
 #enter {
     font-size: larger;
-    background:transparent;
+    background: transparent;
     color: white;
     outline: none;
     border: none;
-    cursor:pointer;
+    cursor: pointer;
 }
 
 .date {
-    color:rgb(108, 108, 108);
+    color: rgb(108, 108, 108);
 }
 
 #chatArea {
@@ -152,14 +155,15 @@ body {
 .admin-options {
     float: right;
     width: max-content;
-    text-align:center;
-    border-radius:30px;
+    text-align: center;
+    border-radius: 30px;
     display: flex;
 }
 
 .admin-options *:hover {
     background-color: #7d0000;
 }
+
 .admin-options * {
     width: 30px;
     margin-right: 10px;
@@ -180,7 +184,7 @@ body {
 
 .displayName {
     font-size: 20px;
-    font-weight:bolder;
+    font-weight: bolder;
     color: #ffffff;
 }
 
@@ -197,7 +201,7 @@ body {
 }
 
 #navbar {
-    width:100%;
+    width: 100%;
     height: 8vh;
     color: white;
     justify-content: center;
@@ -226,7 +230,7 @@ body {
 
 #open {
     cursor: pointer;
-    background:none;
+    background: none;
     outline: none;
     border: none;
     color: white;
@@ -236,7 +240,7 @@ body {
 .chatPicture {
     width: 40%;
     height: max-content;
-    cursor:-webkit-zoom-in;
+    cursor: -webkit-zoom-in;
 }
 
 
@@ -255,14 +259,14 @@ body {
 
 #rooms #joinRoom {
     width: 100%;
-    justify-content:center;
+    justify-content: center;
     align-items: center;
     display: flex;
     flex-direction: column;
     translate: 35%;
 }
 
-#rooms button{
+#rooms button {
     border-radius: 50px;
     width: 30%;
     height: 9vh;
@@ -273,7 +277,8 @@ body {
     color: white;
     font-size: 1.5rem;
 }
-#rooms button:hover{
+
+#rooms button:hover {
     background-color: #e64545;
     border: #00607a;
     color: black;
@@ -299,7 +304,7 @@ body {
 
 #roomName {
     background-color: transparent;
-    outline:transparent;
+    outline: transparent;
     border: none;
     border-bottom: 3px solid white;
     background-size: 400%;
@@ -349,7 +354,6 @@ body {
 
 #sign-in {
     width: 100%;
-    translate: 30%;
 }
 
 #signin {
@@ -372,7 +376,7 @@ body {
     background-color: rgba(0, 0, 0, 0.5);
     position: absolute;
     width: 20%;
-    height:30vh;
+    height: 30vh;
     left: 10px;
     border-radius: 30px;
     padding: 10px;
@@ -385,8 +389,8 @@ body {
     list-style: none;
     height: calc(100% - 50px);
     overflow-y: scroll;
-    overflow-x:visible;
-    overflow-wrap:break-word;
+    overflow-x: visible;
+    overflow-wrap: break-word;
     padding: 10px;
 }
 
@@ -400,8 +404,9 @@ body {
     background-color: rgb(125, 125, 125);
     border: 4px solid transparent;
     border-radius: 8px;
-    background-clip: padding-box;  
+    background-clip: padding-box;
 }
+
 #my-rooms ul::-webkit-scrollbar {
     width: 14px;
 }
@@ -410,10 +415,12 @@ body {
     color: white;
     font-size: 10px;
     position: absolute;
-    z-index: 10000;
+    z-index: 9999;
     font-family: monospace;
     bottom: 10px;
-    left: 77%;
+    left: 10px;
+    width: 100%;
+    text-align: center;
 }
 
 a {
@@ -438,8 +445,7 @@ a {
     flex-direction: column;
 }
 
-#people-online ul{
-    list-style: disc;
+#people-online ul {
     padding: none;
     display: flex;
     flex-direction: column;
@@ -452,12 +458,14 @@ a {
     color: white;
     list-style: none;
 }
+
 #people-online ul::-webkit-scrollbar-thumb {
     background-color: rgb(125, 125, 125);
     border: 4px solid transparent;
     border-radius: 8px;
-    background-clip: padding-box;  
+    background-clip: padding-box;
 }
+
 #people-online ul::-webkit-scrollbar {
     width: 14px;
 }
@@ -474,7 +482,7 @@ a {
 }
 
 .hide {
-    display:none;
+    display: none;
 }
 
 #user-info {
@@ -487,7 +495,7 @@ a {
     border-radius: 30px;
     display: none;
     flex-direction: column;
-    transition:0.3s all;
+    transition: 0.3s all;
     text-align: center;
     color: white;
 }
@@ -618,7 +626,7 @@ a {
     font-size: 15px;
     overflow-y: scroll;
     display: flex;
-    overflow-wrap:break-word;
+    overflow-wrap: break-word;
 }
 
 #link::-webkit-scrollbar {
@@ -648,7 +656,7 @@ a {
     padding: 3px;
 }
 
-#my-profile-nickname::placeholder{
+#my-profile-nickname::placeholder {
     color: #c8c8c8;
 }
 
@@ -729,14 +737,13 @@ a {
 
 #my-profile .close {
     position: relative;
-    top: -142%;
     left: calc(100% - 30px);
     font-family: monospace;
-    font-size: 20px;
+    bottom:130%;
+    font-size: 30px;
     width: 30px;
     text-align: center;
     height: 30px;
-    background-color: #00000086;
     border-top-right-radius: 30px;
     cursor: pointer;
 }
@@ -745,7 +752,7 @@ a {
     background-color: rgba(0, 0, 0, 0.5);
     position: absolute;
     width: 20%;
-    height:30vh;
+    height: 30vh;
     left: 10px;
     top: 50vh;
     border-radius: 30px;
@@ -759,8 +766,8 @@ a {
     list-style: none;
     height: calc(100% - 50px);
     overflow-y: scroll;
-    overflow-x:visible;
-    overflow-wrap:break-word;
+    overflow-x: visible;
+    overflow-wrap: break-word;
     padding: 10px;
 }
 
@@ -774,8 +781,9 @@ a {
     background-color: rgb(125, 125, 125);
     border: 4px solid transparent;
     border-radius: 8px;
-    background-clip: padding-box;  
+    background-clip: padding-box;
 }
+
 #my-friends-container ul::-webkit-scrollbar {
     width: 14px;
 }
@@ -790,6 +798,7 @@ a {
     font-size: 18px;
     text-align: center;
     left: 10px;
+    padding: 5px;
     z-index: 10;
     border: solid 3px white;
     border-radius: 10px;
@@ -797,6 +806,10 @@ a {
     align-items: center;
     justify-content: center;
     cursor: pointer;
+}
+
+#my-friend-requests-tab span {
+    position: relative;
 }
 
 #my-friend-requests-tab:hover {
@@ -871,14 +884,289 @@ a {
     display: none;
 }
 
-@media only screen and (max-width: 560px) {
+.notifications {
+    width: 25px;
+    height: 25px;
+    position: relative;
+    color: white;
+    background-color: red;
+    text-align: center;
+    align-items: center;
+    justify-content: center;
+    display: flex;
+    top: -33%;
+    left: 87%;
+    border-radius: 50%;
+}
+
+#hamburger-menu {
+    display: none;
+    position: fixed;
+    top: 15px;
+    left: 15px;
+    font-size: 30px;
+    color: white;
+    z-index: 10000;
+    cursor: pointer;
+    background: rgba(0, 0, 0, 0.5);
+    padding: 5px 15px;
+    border-radius: 8px;
+    border: 2px solid #e64545;
+}
+
+#sidebar-left {
+    display: contents;
+    /* Keeps your original desktop layout completely untouched */
+}
+
+#returntopage {
+    position: absolute;
+    top: 10px;
+    left: 80%;
+    z-index: 100;
+    background-color: rgba(0, 0, 0, 0.5);
+    border-radius: 30px;
+    border:3px solid #8c8c8c;
+}
+
+#return {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 15px;
+    cursor: pointer;  
+    border-radius: 30px; 
+}
+
+#return:hover {
+    background-color: #7d0000;
+    color: white;
+}
+
+@media only screen and (max-width: 768px) {
+    #hamburger-menu {
+        display: block;
+    }
+
+    #returntopage {
+        top: 90%;
+        width: 60%;
+        left:60%;
+        width:30%;
+        position: absolute;
+    }
+
+    /* Left Sidebar: Hamburger Menu Pop-up */
+    #sidebar-left {
+        display: flex;
+        flex-direction: column;
+        position: fixed;
+        top: 0;
+        left: -100%;
+        /* Hidden off-screen initially */
+        width: 80%;
+        height: 100vh;
+        background: #2b2b2b;
+        z-index: 9999;
+        transition: 0.3s left ease-in-out;
+        padding-top: 70px;
+        overflow-y: auto;
+    }
+
+    #sidebar-left.active {
+        left: 0;
+    }
+
+    /* Override absolute positioning for the sidebar items */
+    #my-friends-container,
+    #my-rooms,
+    #my-friend-requests-tab,
+    #my-friend-requests-container {
+        position: relative;
+        top: auto !important;
+        left: auto !important;
+        width: 90%;
+        margin: 10px auto;
+        box-sizing: border-box;
+    }
+
+    /* Ordering exactly as requested: Friends -> Rooms -> Requests */
+    #my-friends-container {
+        order: 1;
+        height: 25vh;
+        display: block !important;
+    }
+
+    #my-rooms {
+        order: 2;
+        height: 25vh;
+        display: block !important;
+    }
+
+    #my-friend-requests-tab {
+        order: 3;
+        display: flex !important;
+    }
+
+    #my-friend-requests-container {
+        order: 4;
+        height: auto;
+    }
+
+    /* Right Sidebar: Members List (Drag to reveal) */
+    #people-online {
+        position: fixed;
+        top: 0;
+        left: auto !important;
+        right: -100%;
+        /* Hidden off-screen right */
+        width: 75%;
+        height: 100vh;
+        border-radius: 0;
+        transition: right 0.3s ease-out;
+        z-index: 9998;
+        padding-top: 70px;
+        display: flex;
+        background-color: #2b2b2b;
+    }
+
+    #people-online .left {
+        display: flex;
+        width:45%;
+        flex-direction: column;
+    }
+
+    #people-online .right {
+        width: 45%;
+    }
+
+    #people-online.active {
+        right: 0;
+    }
+
+    /* Main Chat Layout Adjustments */
     #chatArea {
-      flex-direction: column;
+        width: 100%;
+        display: flex;
+        translate: 0 -10%;
+        flex-direction: column;
     }
-    #right {
-        width: 80%;
+
+    #left, #right {
+        width: 90%;
+        margin: 0 auto;
     }
+
     #left {
-        width: 80%;
+        height: auto;
     }
-  }
+
+    /* Right side (Messages + Upload + Private Checkbox) */
+    #right {
+        display: flex;
+        flex-direction: column;
+    }
+
+    #chatBox {
+        height: 40vh;
+    }
+
+    #message-container {
+        margin-bottom: 15px;
+    }
+
+    /* Set chat as private below the upload image button */
+    #upload {
+        order: 1;
+        margin-top: 10px;
+    }
+
+    #nic {
+        order: 2;
+        position: relative;
+        left: auto;
+        top: auto;
+        margin-top: 25px;
+        display: block !important;
+        text-align: center;
+    }
+    
+    #my-profile-tab {
+        top: 90%;
+        width: 50%;
+        position: absolute;
+    }
+
+    #my-profile {
+        width: 90%;
+        left: 5%;
+        top: 40%;
+    }
+
+    #roomNameDiv {
+        background: none;
+    }
+}
+
+/* FyreChat Sign-in Aesthetics */
+#sign-in {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    animation: fadeIn 1s ease-in-out;
+}
+
+#logo {
+    width: 150px;
+    height: 150px;
+    border-radius: 50%;
+    border: 5px solid #e64545;
+    box-shadow: 0 0 20px rgba(230, 69, 69, 0.5);
+    animation: glow 2s ease-in-out infinite alternate;
+    margin-bottom: 20px;
+}
+
+#app-name {
+    font-size: 3rem;
+    color: #ffffff;
+    text-shadow: 0 0 10px #e64545, 0 0 20px #e64545, 0 0 30px #e64545;
+    margin-bottom: 30px;
+    font-weight: bold;
+    font-family: 'Courier New', Courier, monospace;
+    animation: textGlow 2s ease-in-out infinite alternate;
+}
+
+#signin {
+    background: black;
+    width: 40%;
+    color: white;
+    font-size: 1.5rem;
+    border-radius: 50px;
+    border: none;
+    cursor: pointer;
+    padding: 15px 30px;
+    transition: all 0.5s;
+    border: solid 5px #e64545;
+}
+
+#signin:hover {
+    color:black;
+    background-color:#e64545;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes glow {
+    from { box-shadow: 0 0 20px rgba(230, 69, 69, 0.5); }
+    to { box-shadow: 0 0 30px rgba(230, 69, 69, 0.8), 0 0 40px rgba(230, 69, 69, 0.4); }
+}
+
+@keyframes textGlow {
+    from { text-shadow: 0 0 10px #e64545, 0 0 20px #e64545, 0 0 30px #e64545; }
+    to { text-shadow: 0 0 15px #e64545, 0 0 25px #e64545, 0 0 35px #e64545, 0 0 45px #e64545; }
+}

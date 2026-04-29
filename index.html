@@ -1,99 +1,152 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chat</title>
+    <meta name="theme-color" content="#000000">
+    <meta name="description" content="A real-time collaborative chat application">
+    <title>FyreChat</title>
     <link rel="stylesheet" href="main.css">
     <link rel="shortcut icon" href="icon.png" type="image/x-icon">
-    <script>
-        function checkMobile(){
-            let check = false;
-            (function(a){if(/(android|bb\d+|meego).+mobile|avantgo|bada\/|blackberry|blazer|compal|elaine|fennec|hiptop|iemobile|ip(hone|od)|iris|kindle|lge |maemo|midp|mmp|mobile.+firefox|netfront|opera m(ob|in)i|palm( os)?|phone|p(ixi|re)\/|plucker|pocket|psp|series(4|6)0|symbian|treo|up\.(browser|link)|vodafone|wap|windows ce|xda|xiino/i.test(a)||/1207|6310|6590|3gso|4thp|50[1-6]i|770s|802s|a wa|abac|ac(er|oo|s\-)|ai(ko|rn)|al(av|ca|co)|amoi|an(ex|ny|yw)|aptu|ar(ch|go)|as(te|us)|attw|au(di|\-m|r |s )|avan|be(ck|ll|nq)|bi(lb|rd)|bl(ac|az)|br(e|v)w|bumb|bw\-(n|u)|c55\/|capi|ccwa|cdm\-|cell|chtm|cldc|cmd\-|co(mp|nd)|craw|da(it|ll|ng)|dbte|dc\-s|devi|dica|dmob|do(c|p)o|ds(12|\-d)|el(49|ai)|em(l2|ul)|er(ic|k0)|esl8|ez([4-7]0|os|wa|ze)|fetc|fly(\-|_)|g1 u|g560|gene|gf\-5|g\-mo|go(\.w|od)|gr(ad|un)|haie|hcit|hd\-(m|p|t)|hei\-|hi(pt|ta)|hp( i|ip)|hs\-c|ht(c(\-| |_|a|g|p|s|t)|tp)|hu(aw|tc)|i\-(20|go|ma)|i230|iac( |\-|\/)|ibro|idea|ig01|ikom|im1k|inno|ipaq|iris|ja(t|v)a|jbro|jemu|jigs|kddi|keji|kgt( |\/)|klon|kpt |kwc\-|kyo(c|k)|le(no|xi)|lg( g|\/(k|l|u)|50|54|\-[a-w])|libw|lynx|m1\-w|m3ga|m50\/|ma(te|ui|xo)|mc(01|21|ca)|m\-cr|me(rc|ri)|mi(o8|oa|ts)|mmef|mo(01|02|bi|de|do|t(\-| |o|v)|zz)|mt(50|p1|v )|mwbp|mywa|n10[0-2]|n20[2-3]|n30(0|2)|n50(0|2|5)|n7(0(0|1)|10)|ne((c|m)\-|on|tf|wf|wg|wt)|nok(6|i)|nzph|o2im|op(ti|wv)|oran|owg1|p800|pan(a|d|t)|pdxg|pg(13|\-([1-8]|c))|phil|pire|pl(ay|uc)|pn\-2|po(ck|rt|se)|prox|psio|pt\-g|qa\-a|qc(07|12|21|32|60|\-[2-7]|i\-)|qtek|r380|r600|raks|rim9|ro(ve|zo)|s55\/|sa(ge|ma|mm|ms|ny|va)|sc(01|h\-|oo|p\-)|sdk\/|se(c(\-|0|1)|47|mc|nd|ri)|sgh\-|shar|sie(\-|m)|sk\-0|sl(45|id)|sm(al|ar|b3|it|t5)|so(ft|ny)|sp(01|h\-|v\-|v )|sy(01|mb)|t2(18|50)|t6(00|10|18)|ta(gt|lk)|tcl\-|tdg\-|tel(i|m)|tim\-|t\-mo|to(pl|sh)|ts(70|m\-|m3|m5)|tx\-9|up(\.b|g1|si)|utst|v400|v750|veri|vi(rg|te)|vk(40|5[0-3]|\-v)|vm40|voda|vulc|vx(52|53|60|61|70|80|81|83|85|98)|w3c(\-| )|webc|whit|wi(g |nc|nw)|wmlb|wonu|x700|yas\-|your|zeto|zte\-/i.test(a.substr(0,4))) check = true;})(navigator.userAgent||navigator.vendor||window.opera);
-            return check;
-        }
-        if(checkMobile()){
-            alert("This website is best viewed on a bigger screen!")
-        }
-    </script>
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icon.png">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/color-thief/2.3.0/color-thief.umd.js" defer></script>
     <script src="index.js" type="module" defer></script>
+    <script>
+        // Fetch and display version and author from manifest.json
+        fetch('manifest.json')
+            .then(response => response.json())
+            .then(manifest => {
+                document.getElementById('version-number').textContent = manifest.version;
+                if (manifest.author) {
+                    document.getElementById('author-name').textContent = manifest.author.name;
+                    document.getElementById('author-link').href = manifest.author.url;
+                }
+            })
+            .catch(error => {
+                console.log('Could not fetch manifest:', error);
+                document.getElementById('version-number').textContent = 'unknown';
+            });
+    </script>
+    <script>
+        // Register Service Worker for PWA
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('swa.js').then((registration) => {
+                console.log('Service Worker registered successfully:', registration);
+                
+                // Check for updates periodically
+                setInterval(() => {
+                    registration.update();
+                }, 60000); // Check every minute
+                
+                // Handle updates available
+                registration.addEventListener('updatefound', () => {
+                    const newWorker = registration.installing;
+                    newWorker.addEventListener('statechange', () => {
+                        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                            console.log('New service worker available, update ready to install');
+                            // Optionally prompt user for update
+                        }
+                    });
+                });
+            }).catch((error) => {
+                console.log('Service Worker registration failed:', error);
+            });
+        }
+    </script>
 </head>
+
 <body>
     <div id="version">
-        v1.3.4 By <a href = "https://krupaltisgaonkar.github.io" target="_blank">Krupal Tisgaonkar</a>
+        v<span id="version-number">loading...</span> By <a id="author-link" href="//lolfactor39.github.io" target="_blank"><span id="author-name">Krupal Tisgaonkar</span></a>
         |
-        <a href = "termsandpolicies.html" target="_blank">Terms and Policies</a>
-    </div>
-    <div id="navbar">
-        <ul>
-            <li id = "rules">Rules</li>
-            <li id = "general">General</li>
-            <li id = "memes">Memes</li>
-            <li id = "school">School and HW</li>
-        </ul>
+        <a href="termsandpolicies.html" target="_blank">Terms and Policies</a>
     </div>
     <div id="background"></div>
+    <div id="hamburger-menu">&#9776;</div>
     <div id="login"></div>
-    <div id="rooms">
-        <div id = "admin-help">Press Ctrl + Shift + h to view the admin help board</div>
-        <button id = "joinMain">Join Main Room</button><br><br><br>
-        <button id = "createroom">Create room</button><br><br><br>
-        <button id = "join">Join a room</button>
-        <div id="joinRoom">
-            <button id = "wow">Back</button><br><br><br>
-            <input type="text" id="roomid" placeholder="room id" spellcheck="false" autocomplete="off" >
-            <br>
-            <button id = "joinbutton">Continue</button>
+    <div id="sidebar-left">
+        <div id="my-rooms">
+            My Rooms:
+            <ul id="niceone">
+                loading...
+            </ul>
+        </div>
+        <div id="my-friends-container">
+            My Friends: <br>
+            <ul id="my-friends">loading...</ul>
+        </div>
+        <div id="my-friend-requests-tab">
+            <div class="notifications" id="friend-request-notification-number">0</div>
+            <span>Received Friend Requests</span>
+        </div>
+        <div id="my-friend-requests-container">
+            <div class="close" id="friend-requests-close">x</div>
+            Friend Requests
+            <div id="my-friend-requests">
+                <div class="my-friend-requests-container">
+                </div>
+            </div>
         </div>
     </div>
-    <div id = "my-rooms">
-        My Rooms:
-        <ul id = "niceone">
-        </ul>
+    <div id="returntopage">
+        <button id="return">Return to homepage</button>
     </div>
-    <div id="my-friends-container">
-        My Friends:
-        <ul id="my-friends"></ul>
+    <div id="rooms">
+        <div id="admin-help">Press Ctrl + Shift + h to view the admin help board</div>
+        <button id="createroom">Create room</button><br><br><br>
+        <button id="join">Join a room</button>
+        <div id="joinRoom">
+            <button id="wow">Back</button><br><br><br>
+            <input type="text" id="roomid" placeholder="room id" spellcheck="false" autocomplete="off">
+            <br>
+            <button id="joinbutton">Continue</button>
+        </div>
     </div>
     <div id="people-online">
         <input type="text" name="" id="search-people" placeholder="Search People" autocomplete="off">
-        <strong style = "font-size: 20px; color: chartreuse;">Members:</strong>
-        <ul id = "members">
-            <li>sample</li>
+        <strong style="font-size: 20px; color: chartreuse;">Members:</strong>
+        <ul id="members" style="max-height: 50%; height:inherit">
+            <li>loading or no members</li>
         </ul>
-        <strong style = "font-size: 20px; color: red;">Banned:</strong>
-        <ul id = "banned">
-            <li>banned</li>
+        <strong style="font-size: 20px; color: red;">Banned:</strong>
+        <ul id="banned" style="max-height: 50%; height:inherit">
+            <li>loading or no banned users</li>
         </ul>
     </div>
     <div id="chatArea">
         <div id="left">
             <div id="people">
-                <div id = "thingy"><h1> Code: <span id = "online">0</span></h1></div>
+                <div id="thingy">
+                    <h1> Code: <span id="online">0</span></h1>
+                </div>
             </div>
             <div id="roomNameDiv">
-                <div id = "hehe"><h1> Room Name: <input id = "roomName" maxlength="50" spellcheck="false" autocomplete="off"></h1></div>
+                <div id="hehe">
+                    <h1> Room Name: <input id="roomName" maxlength="50" spellcheck="false" autocomplete="off"></h1>
+                </div>
             </div>
         </div>
         <div id="right">
             <div id="chatBox">
                 loading...
             </div>
-            <div id = "message-container">    
-                <input type="text" id = "message" placeholder="any message" maxlength="500" autocomplete="off">
+            <div id="message-container">
+                <textarea type="text" id="message" placeholder="any message" maxlength="500"
+                    autocomplete="off"></textarea>
                 <div class="container">
-                    <button id = "enter">Send</button> 
+                    <button id="enter">Send</button>
                 </div>
             </div>
-            <input type="file" name="" id = "upload" accept="image/*">
+            <input type="file" name="" id="upload" accept="image/*">
         </div>
         <div id="nic"> Set chat to private <input type="checkbox" id="status-of-chat"></div>
-        
+
     </div>
     <div id="user-info">
         <div class="top">
-            <div id = "profile-background"><span id = "vowwwwidk"></span></div>
+            <div id="profile-background"><span id="vowwwwidk"></span><br><span id="idk2"></span></div>
             <div id="profile-pic"></div>
         </div>
         <div class="bottom">
@@ -106,30 +159,72 @@
         <div class="top">
             <div id="my-profile-background"></div>
             <div id="my-profile-pic"></div>
-            <input type="text" id="my-profile-nickname" title = "click to edit ur nickname"placeholder="Your nickname" autocomplete="off" spellcheck="false" maxlength="30">
+            <input type="text" id="my-profile-nickname" title="click to edit ur nickname" placeholder="Your nickname"
+                autocomplete="off" spellcheck="false" maxlength="30">
             <div id="my-profile-displayname">Loading...</div>
-            <div class="close" id = "close-my-profile">x</div>
+            <div class="close" id="close-my-profile">x</div>
         </div>
         <div class="bottom">
             <button id="sign-out">Signout</button>
             <!--<strong>Your Status:</strong><div id="my-profile-status">Loading...</div>-->
             <strong>Friending Link:</strong>
-            <div id="friending-url"><div id = "link">Loading...</div><img src="copy-icon.png" id = "friending-link-copy"alt="copy" title = "copy link" class = "copy"></div>
+            <div id="friending-url">
+                <div id="link">Loading...</div><img src="copy-icon.png" id="friending-link-copy" alt="copy"
+                    title="copy link" class="copy">
+            </div>
         </div>
     </div>
     <div id="my-profile-tab">
         <span>My Profile</span>
     </div>
-    <div id="my-friend-requests-tab">
-        Received Friend Requests
-    </div>
-    <div id="my-friend-requests-container">
-        <div class="close" id="friend-requests-close">x</div>
-        Friend Requests
-        <div id="my-friend-requests">
-            <div class="my-friend-requests-container">
-            </div>
-        </div>
-    </div>
+
+    <script>
+        // --- Mobile Responsive Behaviors ---
+
+        // 1. Hamburger Menu Toggle
+        const hamburgerMenu = document.getElementById('hamburger-menu');
+        const sidebarLeft = document.getElementById('sidebar-left');
+
+        if (hamburgerMenu && sidebarLeft) {
+            hamburgerMenu.addEventListener('click', () => {
+                sidebarLeft.classList.toggle('active');
+            });
+        }
+
+        // 2. Drag/Swipe to reveal Members List
+        let touchStartX = 0;
+        let touchEndX = 0;
+        const peopleOnline = document.getElementById('people-online');
+
+        function handleSwipe() {
+            if (!peopleOnline) return;
+
+            // Minimum horizontal distance to trigger the menu drag
+            const swipeThreshold = 60;
+
+            if (touchEndX < touchStartX - swipeThreshold) {
+                // Dragged screen LEFT -> Reveal Members List from the Right
+                peopleOnline.classList.add('active');
+                // Optionally close the left sidebar if it's open
+                if (sidebarLeft) sidebarLeft.classList.remove('active');
+            }
+            if (touchEndX > touchStartX + swipeThreshold) {
+                // Dragged screen RIGHT -> Hide Members List
+                peopleOnline.classList.remove('active');
+            }
+        }
+
+        // Track where the user's finger starts touching the screen
+        document.addEventListener('touchstart', e => {
+            touchStartX = e.changedTouches[0].screenX;
+        }, { passive: true });
+
+        // Track where the user's finger lifts off the screen and calculate direction
+        document.addEventListener('touchend', e => {
+            touchEndX = e.changedTouches[0].screenX;
+            handleSwipe();
+        }, { passive: true });
+    </script>
 </body>
+
 </html>
