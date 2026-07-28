@@ -1,4 +1,4 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/9.0.1/firebase-app.js"; import { getDatabase, ref, set, onValue, get, off, child, update, limitToLast, query, remove, onDisconnect } from "https://www.gstatic.com/firebasejs/9.0.1/firebase-database.js"; import { getAuth, GoogleAuthProvider, signInWithPopup, getAdditionalUserInfo, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/9.0.1/firebase-auth.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.0.1/firebase-app.js"; import { getDatabase, ref, set, onValue, get, off, child, update, limitToLast, query, remove, onDisconnect, push } from "https://www.gstatic.com/firebasejs/9.0.1/firebase-database.js"; import { getAuth, GoogleAuthProvider, signInWithPopup, getAdditionalUserInfo, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/9.0.1/firebase-auth.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyAMfW_Qc7q1rlM-KJYKbUbc_zUqtZ24qNw",
@@ -18,7 +18,8 @@ const auth = getAuth(app);
 let totalRooms = 0
 let notificationAllowed
 
-
+// Sound effect for in-chat notifications
+const dingSound = new Audio("./ding.mp3");
 
 
 let settings = {}
@@ -41,6 +42,7 @@ onAuthStateChanged(auth, async (user) => {
         checkIfGlobalAdmin();
         retrieveRooms();
         addFriend();
+        setUpMessageNotifications();
 
     } else {
         // User is signed out, show login setup
@@ -1014,6 +1016,39 @@ const message = document.getElementById("message")
 const send = document.getElementById("enter")
 
 
+// Function to automatically adjust textarea height
+function autoExpandTextarea() {
+    const maxHeight = 150; // Maximum height in pixels before scrolling kicks in
+
+    // Reset height to compute actual scrollHeight accurately
+    message.style.height = 'auto';
+
+    if (message.scrollHeight > maxHeight) {
+        message.style.height = maxHeight + 'px';
+        message.style.overflowY = 'auto'; // Show scrollbar when exceeding limit
+    } else {
+        message.style.height = message.scrollHeight + 'px';
+        message.style.overflowY = 'hidden'; // Hide scrollbar while expanding
+    }
+}
+
+// Expand as user types or pastes text
+message.addEventListener("input", autoExpandTextarea);
+
+// Handle Enter to send, Shift+Enter for new line
+message.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault(); // Prevent adding a newline on send
+        
+        // Write message using your existing function
+        writeData(randomCode, message.value, false, isOnMain, partofmain);
+        
+        // Reset height back to 1 row after sending
+        message.style.height = 'auto';
+        message.style.overflowY = 'hidden';
+    }
+});
+
 // files 
 const fileInput = document.getElementById("upload")
 fileInput.addEventListener('change', (event) => {
@@ -1044,7 +1079,7 @@ send.addEventListener("click", () => {
 })
 
 
-function writeData(id, text, sendingAttachment, main, part) {
+async function writeData(id, text, sendingAttachment, main, part) {
     if (text.trim() == "") {
         return false
     } else {
@@ -1057,7 +1092,52 @@ function writeData(id, text, sendingAttachment, main, part) {
         message.value = ""
         //console.log(index)
         const send = [text, `${new Date().toLocaleDateString('en-US', { month: "long", day: "numeric", year: "numeric" })} at ${new Date().toLocaleTimeString()}`, "", settings.nickname == null ? settings.displayName : settings.nickname, sendingAttachment, settings.uid, settings.profilePic]
-        set(location, send)
+        await set(location, send)
+        if (!sendingAttachment && !main) {
+            createMessageNotifications(id, text)
+        }
+    }
+}
+
+function messageMentionsName(messageText, name) {
+    const normalizedName = name && name.trim()
+    if (!normalizedName) return false
+    return messageText.toLocaleLowerCase().includes(`@[${normalizedName.toLocaleLowerCase()}]`)
+}
+
+async function createMessageNotifications(chatId, messageText) {
+    try {
+        const recipients = new Map()
+        const friendsSnapshot = await get(ref(db, `users/${settings.uid}/friends`))
+        const friends = friendsSnapshot.val() || {}
+
+        Object.entries(friends).forEach(([friendId, friendChatId]) => {
+            if (friendChatId === chatId) recipients.set(friendId, "direct message")
+        })
+
+        const membersSnapshot = await get(ref(db, `chat/${chatId}/members`))
+        await Promise.all(Object.keys(membersSnapshot.val() || {}).map(async (memberId) => {
+            if (memberId === settings.uid) return
+            const [nicknameSnapshot, displayNameSnapshot] = await Promise.all([
+                get(ref(db, `users/${memberId}/nickname`)),
+                get(ref(db, `users/${memberId}/displayName`))
+            ])
+            if (messageMentionsName(messageText, nicknameSnapshot.val()) || messageMentionsName(messageText, displayNameSnapshot.val())) {
+                if (!recipients.has(memberId)) recipients.set(memberId, "mention")
+            }
+        }))
+
+        await Promise.all([...recipients].map(([recipientId, type]) => push(ref(db, `users/${recipientId}/notifications`), {
+            type,
+            senderId: settings.uid,
+            senderName: settings.nickname == null ? settings.displayName : settings.nickname,
+            message: messageText,
+            chatId,
+            createdAt: Date.now(),
+            read: false
+        })))
+    } catch (error) {
+        console.error("Could not create message notifications:", error)
     }
 }
 
@@ -1365,6 +1445,237 @@ document.getElementById("return").addEventListener("click", () => {
     isUserAdmin = false;
 })
 
+let notificationIds = new Set()
+let notificationsReady = false
+
+function notificationDescription(notification) {
+    const type = notification.type === "direct message" ? "sent you a direct message" : "mentioned you"
+    return `${notification.senderName || "Someone"} ${type}`
+}
+
+function displayMessageNotification(notification) {
+    const toast = document.getElementById("message-notification-toast")
+    toast.textContent = `${notificationDescription(notification)}: ${notification.message}`
+    toast.classList.add("visible")
+    window.setTimeout(() => toast.classList.remove("visible"), 5000)
+
+    if (notifications === "granted" && document.visibilityState === "hidden") {
+        new Notification(notificationDescription(notification), {
+            body: notification.message,
+            icon: "icon.png",
+            vibrate: [200, 100, 200]
+        })
+    }
+}
+
+function setUpMessageNotifications() {
+    onValue(ref(db, `users/${settings.uid}/notifications`), async (snapshot) => {
+        const notificationsById = snapshot.val() || {}
+        const entries = Object.entries(notificationsById)
+
+        // 1. Process NEW incoming notifications
+        if (notificationsReady) {
+            const newNotifications = entries.filter(([notificationId]) => !notificationIds.has(notificationId))
+            
+            for (const [notificationId, notification] of newNotifications) {
+                // Scenario A: User is currently viewing this exact chat room
+                if (randomCode && randomCode === notification.chatId) {
+                    dingSound.currentTime = 0;
+                    dingSound.play().catch(e => console.log("Audio play blocked by browser policy:", e));
+
+                    // Auto-delete so it doesn't clutter the panel
+                    remove(ref(db, `users/${settings.uid}/notifications/${notificationId}`));
+                    continue; 
+                }
+
+                // Scenario B: User is in another room or browser tab is minimized/in background
+                // Send system desktop notification to the computer
+                sendDesktopNotification(notification);
+            }
+        }
+
+        notificationIds = new Set(entries.map(([notificationId]) => notificationId))
+        notificationsReady = true
+
+        // 2. Update unread badge counter
+        const unreadCount = entries.filter(([, notification]) => !notification.read).length
+        const badge = document.getElementById("message-notification-number")
+        badge.textContent = unreadCount
+        badge.style.display = unreadCount ? "flex" : "none"
+
+        const list = document.getElementById("message-notifications")
+        list.innerHTML = ""
+
+        if (entries.length === 0) {
+            list.innerHTML = `<div style="padding: 10px; color: #888;">No notifications yet.</div>`
+            return
+        }
+
+        // 3. Group notifications by chatId
+        const groups = {}
+        entries.forEach(([id, notif]) => {
+            const chatId = notif.chatId || "unknown"
+            if (!groups[chatId]) {
+                groups[chatId] = {
+                    chatId,
+                    notifications: [],
+                    latestTime: 0,
+                    unreadCount: 0
+                }
+            }
+            groups[chatId].notifications.push({ id, ...notif })
+            if (notif.createdAt > groups[chatId].latestTime) {
+                groups[chatId].latestTime = notif.createdAt
+            }
+            if (!notif.read) {
+                groups[chatId].unreadCount++
+            }
+        })
+
+        // 4. Sort groups chronologically
+        const sortedGroups = Object.values(groups).sort((a, b) => b.latestTime - a.latestTime)
+
+        // 5. Render accordion panels
+        for (const group of sortedGroups) {
+            let roomTitle = group.chatId
+            const isDirectMessage = group.chatId.length === 50 || group.notifications.some(n => n.type === "direct message")
+
+            if (isDirectMessage) {
+                const firstNotif = group.notifications[0]
+                roomTitle = `DM with ${firstNotif.senderName || "Friend"}`
+            } else {
+                try {
+                    const nicknameSnap = await get(ref(db, `chat/${group.chatId}/nickname`))
+                    if (nicknameSnap.val()) {
+                        roomTitle = nicknameSnap.val()
+                    }
+                } catch (err) {
+                    console.error("Error fetching room title:", err)
+                }
+            }
+
+            group.notifications.sort((a, b) => b.createdAt - a.createdAt)
+
+            const accordion = document.createElement("details")
+            accordion.classList.add("notification-group")
+            if (group.unreadCount > 0) accordion.open = true
+
+            const summary = document.createElement("summary")
+            summary.classList.add("group-header")
+            summary.innerHTML = `
+                <span class="group-title">💬 ${roomTitle} (${group.notifications.length})</span>
+                ${group.unreadCount > 0 ? `<span class="group-badge">${group.unreadCount} new</span>` : ''}
+            `
+            accordion.appendChild(summary)
+
+            const groupContent = document.createElement("div")
+            groupContent.classList.add("group-content")
+
+            group.notifications.forEach((notification) => {
+                const item = document.createElement("button")
+                item.classList.add("message-notification-item")
+                if (!notification.read) item.classList.add("unread")
+
+                const timeFormatted = notification.createdAt 
+                    ? new Date(notification.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
+                    : ""
+                const sender = notification.senderName || "Someone"
+                const typeText = notification.type === "direct message" ? "direct message" : "mentioned you"
+
+                item.innerHTML = `
+                    <div class="notification-header">
+                        <strong>${sender}</strong>
+                        <span class="notification-time">${timeFormatted}</span>
+                    </div>
+                    <div class="notification-type">${typeText}</div>
+                    <div class="notification-body">"${notification.message || ""}"</div>
+                `
+
+                item.addEventListener("click", async () => {
+                    await remove(ref(db, `users/${settings.uid}/notifications/${notification.id}`))
+                    document.getElementById("message-notifications-container").style.display = "none"
+
+                    if (notification.chatId) {
+                        randomCode = notification.chatId
+                        document.getElementById("online").textContent = randomCode
+
+                        onValue(ref(db, `chat/${randomCode}/ban`), async (banSnap) => {
+                            const banList = banSnap.val() == null ? "" : Object.keys(banSnap.val())
+                            if (banList.includes(settings.uid)) {
+                                alert("You are banned from this chat")
+                                window.location.reload()
+                            } else {
+                                await whichOne(randomCode, false, "")
+                                
+                                if (randomCode.length === 50 || notification.type === "direct message") {
+                                    document.getElementById("roomNameDiv").style.display = "none"
+                                    document.getElementById("people").style.display = "none"
+                                    document.getElementById("nic").style.display = "none"
+                                }
+                            }
+                        }, { onlyOnce: true })
+                    }
+                })
+
+                groupContent.appendChild(item)
+            })
+
+            accordion.appendChild(groupContent)
+            list.appendChild(accordion)
+        }
+    })
+}
+
+document.getElementById("message-notifications-tab").addEventListener("click", () => {
+    document.getElementById("message-notifications-container").style.display = "block"
+})
+
+document.getElementById("message-notifications-close").addEventListener("click", () => {
+    document.getElementById("message-notifications-container").style.display = "none"
+})
+
+function sendDesktopNotification(notification) {
+    // Check if the browser supports notifications and if permission has been granted
+    if (!("Notification" in window) || Notification.permission !== "granted") {
+        return;
+    }
+
+    const title = notification.type === "direct message" 
+        ? `💬 DM from ${notification.senderName || "Someone"}`
+        : `📣 ${notification.senderName || "Someone"} mentioned you!`;
+
+    const desktopNotif = new Notification(title, {
+        body: notification.message || "",
+        icon: "icon.png",
+        vibrate: [200, 100, 200],
+        silent: false
+    });
+
+    // When the user clicks the Windows/Mac notification pop-up banner:
+    desktopNotif.onclick = function () {
+        window.focus(); // Bring the browser window back into focus
+        desktopNotif.close();
+
+        // Automatically navigate to the room
+        if (notification.chatId) {
+            randomCode = notification.chatId;
+            document.getElementById("online").textContent = randomCode;
+
+            onValue(ref(db, `chat/${randomCode}/ban`), async (banSnap) => {
+                const banList = banSnap.val() == null ? "" : Object.keys(banSnap.val());
+                if (!banList.includes(settings.uid)) {
+                    await whichOne(randomCode, false, "");
+                    if (randomCode.length === 50 || notification.type === "direct message") {
+                        document.getElementById("roomNameDiv").style.display = "none";
+                        document.getElementById("people").style.display = "none";
+                        document.getElementById("nic").style.display = "none";
+                    }
+                }
+            }, { onlyOnce: true });
+        }
+    };
+}
+
 
 
 // sending notifications
@@ -1376,7 +1687,7 @@ function askNotificationPermission() {
     }
     Notification.requestPermission().then((permission) => {
         notifications = permission
-        if (!permission) {
+        if (permission !== "granted") {
             alert("Please enable notifications if you want to know if there are any new messages. We promise you will only receive notifications of the chat you are on")
         }
     });
@@ -1385,7 +1696,7 @@ function askNotificationPermission() {
 askNotificationPermission()
 
 function sendNotification(message, place, name, pic) {
-    if (notifications) {
+    if (notifications === "granted") {
         if (document.visibilityState == "hidden") {
             const notification = new Notification(`New message from ${name} in room ${place}`, { body: message, icon: "icon.png", vibrate: [200, 100, 200], });
         }

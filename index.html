@@ -81,6 +81,14 @@
             <div class="notifications" id="friend-request-notification-number">0</div>
             <span>Received Friend Requests</span>
         </div>
+        <button id="message-notifications-tab" type="button" title="Message notifications">
+            <span aria-hidden="true">🔔</span><span class="notifications" id="message-notification-number">0</span>
+        </button>
+        <div id="message-notifications-container">
+            <div class="close" id="message-notifications-close">x</div>
+            <strong>Notifications</strong>
+            <div id="message-notifications"></div>
+        </div>
         <div id="my-friend-requests-container">
             <div class="close" id="friend-requests-close">x</div>
             Friend Requests
@@ -134,7 +142,7 @@
             </div>
             <div id="message-container">
                 <textarea type="text" id="message" placeholder="any message" maxlength="500"
-                    autocomplete="off"></textarea>
+                    autocomplete="off" rows="1"></textarea>
                 <div class="container">
                     <button id="enter">Send</button>
                 </div>
@@ -177,6 +185,7 @@
     <div id="my-profile-tab">
         <span>My Profile</span>
     </div>
+    <div id="message-notification-toast" role="status" aria-live="polite"></div>
 
     <script>
         // --- Mobile Responsive Behaviors ---
